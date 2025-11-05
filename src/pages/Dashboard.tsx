@@ -1,0 +1,210 @@
+import { useEffect, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import DashboardLayout from "@/components/DashboardLayout";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+import { CheckSquare, FileText, Users, AlertCircle, Clock, CheckCircle2 } from "lucide-react";
+
+const Dashboard = () => {
+  const [stats, setStats] = useState({
+    totalTasks: 0,
+    completedTasks: 0,
+    pendingDocs: 0,
+    teamMembers: 0,
+  });
+  const [recentTasks, setRecentTasks] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Fetch stats
+      const [tasksResult, docsResult, membersResult] = await Promise.all([
+        supabase.from("tasks").select("status"),
+        supabase.from("documents").select("is_approved"),
+        supabase.from("profiles").select("id").eq("is_active", true),
+      ]);
+
+      const tasks = tasksResult.data || [];
+      const completedCount = tasks.filter(t => t.status === "completed").length;
+
+      setStats({
+        totalTasks: tasks.length,
+        completedTasks: completedCount,
+        pendingDocs: (docsResult.data || []).filter(d => !d.is_approved).length,
+        teamMembers: (membersResult.data || []).length,
+      });
+
+      // Fetch recent tasks
+      const { data: recentTasksData } = await supabase
+        .from("tasks")
+        .select("*, profiles!tasks_assigned_to_fkey(full_name)")
+        .order("created_at", { ascending: false })
+        .limit(5);
+
+      setRecentTasks(recentTasksData || []);
+    };
+
+    fetchDashboardData();
+  }, []);
+
+  const completionRate = stats.totalTasks > 0 
+    ? Math.round((stats.completedTasks / stats.totalTasks) * 100) 
+    : 0;
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case "completed":
+        return <CheckCircle2 className="h-4 w-4 text-success" />;
+      case "in_progress":
+        return <Clock className="h-4 w-4 text-warning" />;
+      default:
+        return <AlertCircle className="h-4 w-4 text-muted-foreground" />;
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "completed":
+        return "bg-success/10 text-success";
+      case "in_progress":
+        return "bg-warning/10 text-warning";
+      case "blocked":
+        return "bg-destructive/10 text-destructive";
+      default:
+        return "bg-muted text-muted-foreground";
+    }
+  };
+
+  const getPriorityColor = (priority: string) => {
+    switch (priority) {
+      case "critical":
+        return "bg-destructive text-destructive-foreground";
+      case "high":
+        return "bg-warning text-warning-foreground";
+      case "medium":
+        return "bg-accent text-accent-foreground";
+      default:
+        return "bg-muted text-muted-foreground";
+    }
+  };
+
+  return (
+    <DashboardLayout>
+      <div className="space-y-8">
+        <div>
+          <h1 className="text-3xl font-bold mb-2">Dashboard</h1>
+          <p className="text-muted-foreground">
+            Welcome back! Here's an overview of your team's progress.
+          </p>
+        </div>
+
+        {/* Stats Grid */}
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <Card className="shadow-card hover:shadow-hover transition-shadow">
+            <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+              <CardTitle className="text-sm font-medium">Total Tasks</CardTitle>
+              <CheckSquare className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.totalTasks}</div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {stats.completedTasks} completed
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="shadow-card hover:shadow-hover transition-shadow">
+            <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+              <CardTitle className="text-sm font-medium">Completion Rate</CardTitle>
+              <Progress value={completionRate} className="w-16 h-2" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{completionRate}%</div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Task completion progress
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="shadow-card hover:shadow-hover transition-shadow">
+            <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+              <CardTitle className="text-sm font-medium">Pending Documents</CardTitle>
+              <FileText className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.pendingDocs}</div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Awaiting approval
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="shadow-card hover:shadow-hover transition-shadow">
+            <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+              <CardTitle className="text-sm font-medium">Team Members</CardTitle>
+              <Users className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.teamMembers}</div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Active members
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Recent Tasks */}
+        <Card className="shadow-card">
+          <CardHeader>
+            <CardTitle>Recent Tasks</CardTitle>
+            <CardDescription>Latest task updates from your team</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {recentTasks.length === 0 ? (
+              <p className="text-center text-muted-foreground py-8">
+                No tasks yet. Create your first task to get started.
+              </p>
+            ) : (
+              <div className="space-y-4">
+                {recentTasks.map((task) => (
+                  <div
+                    key={task.id}
+                    className="flex items-start justify-between p-4 border border-border rounded-lg hover:bg-muted/50 transition-colors"
+                  >
+                    <div className="flex-1 space-y-2">
+                      <div className="flex items-center gap-2">
+                        {getStatusIcon(task.status)}
+                        <h4 className="font-medium">{task.title}</h4>
+                      </div>
+                      <p className="text-sm text-muted-foreground line-clamp-2">
+                        {task.description || "No description"}
+                      </p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Badge variant="outline" className={getStatusColor(task.status)}>
+                          {task.status.replace("_", " ")}
+                        </Badge>
+                        <Badge className={getPriorityColor(task.priority)}>
+                          {task.priority}
+                        </Badge>
+                        {task.profiles && (
+                          <span className="text-xs text-muted-foreground">
+                            Assigned to: {task.profiles.full_name}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </DashboardLayout>
+  );
+};
+
+export default Dashboard;
