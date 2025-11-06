@@ -17,16 +17,16 @@ All colors MUST be HSL.
     --popover: 0 0% 100%;
     --popover-foreground: 220 13% 13%;
 
-    --primary: 0 72% 51%;
+    --primary: 215 100% 50%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 220 13% 18%;
+    --secondary: 215 90% 40%;
     --secondary-foreground: 0 0% 100%;
 
-    --muted: 220 13% 95%;
-    --muted-foreground: 220 9% 46%;
+    --muted: 215 20% 95%;
+    --muted-foreground: 215 10% 46%;
 
-    --accent: 211 100% 50%;
+    --accent: 215 100% 60%;
     --accent-foreground: 0 0% 100%;
 
     --destructive: 0 84% 60%;
@@ -44,24 +44,24 @@ All colors MUST be HSL.
     --warning: 38 92% 50%;
     --warning-foreground: 0 0% 100%;
 
-    /* Racing gradients */
-    --gradient-racing: linear-gradient(135deg, hsl(0 72% 51%) 0%, hsl(0 84% 60%) 100%);
-    --gradient-tech: linear-gradient(135deg, hsl(220 13% 18%) 0%, hsl(220 9% 28%) 100%);
-    --gradient-accent: linear-gradient(135deg, hsl(211 100% 50%) 0%, hsl(211 100% 60%) 100%);
+    /* Formula IHU gradients */
+    --gradient-racing: linear-gradient(135deg, hsl(215 100% 50%) 0%, hsl(215 100% 60%) 100%);
+    --gradient-tech: linear-gradient(135deg, hsl(215 90% 40%) 0%, hsl(215 80% 50%) 100%);
+    --gradient-accent: linear-gradient(135deg, hsl(215 100% 60%) 0%, hsl(215 100% 70%) 100%);
 
     /* Shadows */
-    --shadow-racing: 0 10px 40px -10px hsl(0 72% 51% / 0.3);
+    --shadow-racing: 0 10px 40px -10px hsl(215 100% 50% / 0.3);
     --shadow-card: 0 4px 20px -2px hsl(220 13% 13% / 0.08);
-    --shadow-hover: 0 8px 30px -4px hsl(220 13% 13% / 0.15);
+    --shadow-hover: 0 8px 30px -4px hsl(215 100% 50% / 0.15);
 
     --sidebar-background: 0 0% 98%;
     --sidebar-foreground: 220 13% 18%;
-    --sidebar-primary: 0 72% 51%;
+    --sidebar-primary: 215 100% 50%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 220 13% 95%;
+    --sidebar-accent: 215 20% 95%;
     --sidebar-accent-foreground: 220 13% 18%;
     --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 0 72% 51%;
+    --sidebar-ring: 215 100% 50%;
   }
 
   .dark {
@@ -74,16 +74,16 @@ All colors MUST be HSL.
     --popover: 220 13% 13%;
     --popover-foreground: 0 0% 98%;
 
-    --primary: 0 72% 51%;
+    --primary: 215 100% 50%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 220 13% 18%;
+    --secondary: 215 90% 40%;
     --secondary-foreground: 0 0% 100%;
 
     --muted: 220 13% 18%;
     --muted-foreground: 220 9% 65%;
 
-    --accent: 211 100% 50%;
+    --accent: 215 100% 60%;
     --accent-foreground: 0 0% 100%;
 
     --destructive: 0 62% 50%;
@@ -101,12 +101,12 @@ All colors MUST be HSL.
 
     --sidebar-background: 220 13% 13%;
     --sidebar-foreground: 0 0% 98%;
-    --sidebar-primary: 0 72% 51%;
+    --sidebar-primary: 215 100% 50%;
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 220 13% 18%;
     --sidebar-accent-foreground: 0 0% 98%;
     --sidebar-border: 220 13% 18%;
-    --sidebar-ring: 0 72% 51%;
+    --sidebar-ring: 215 100% 50%;
   }
 }
 

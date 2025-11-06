@@ -1,0 +1,220 @@
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import DashboardLayout from "@/components/DashboardLayout";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+import { UserPlus, Mail, Phone, Users as UsersIcon } from "lucide-react";
+import { useUserRole } from "@/hooks/useUserRole";
+
+type Profile = {
+  id: string;
+  full_name: string;
+  email: string;
+  phone: string | null;
+  department: string | null;
+  sub_team: string | null;
+  skills: string[] | null;
+  certifications: string[] | null;
+  avatar_url: string | null;
+  is_active: boolean;
+};
+
+type UserWithRole = Profile & {
+  user_roles: Array<{
+    role: string;
+    department: string | null;
+  }> | null;
+};
+
+const Team = () => {
+  const [members, setMembers] = useState<UserWithRole[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<any>(null);
+  const { toast } = useToast();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) {
+        navigate("/");
+      } else {
+        setUser(session.user);
+      }
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!session) {
+        navigate("/");
+      } else {
+        setUser(session.user);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [navigate]);
+
+  const { isTeamLeader } = useUserRole(user?.id);
+
+  useEffect(() => {
+    if (user) {
+      fetchTeamMembers();
+    }
+  }, [user]);
+
+  const fetchTeamMembers = async () => {
+    try {
+      const { data: profiles, error: profilesError } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("is_active", true)
+        .order("full_name", { ascending: true });
+
+      if (profilesError) throw profilesError;
+
+      // Fetch roles separately for each user
+      const membersWithRoles = await Promise.all(
+        (profiles || []).map(async (profile) => {
+          const { data: roles } = await supabase
+            .from("user_roles")
+            .select("role, department")
+            .eq("user_id", profile.id);
+          
+          return { ...profile, user_roles: roles };
+        })
+      );
+
+      setMembers(membersWithRoles);
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message,
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getRoleBadge = (member: UserWithRole) => {
+    const role = member.user_roles?.[0]?.role || "member";
+    const colors: Record<string, string> = {
+      team_leader: "bg-primary text-primary-foreground",
+      director: "bg-secondary text-secondary-foreground",
+      chief: "bg-accent text-accent-foreground",
+      member: "bg-muted text-muted-foreground",
+    };
+    
+    return (
+      <Badge className={colors[role]}>
+        {role.replace("_", " ").toUpperCase()}
+      </Badge>
+    );
+  };
+
+  const getInitials = (name: string) => {
+    return name
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2);
+  };
+
+  return (
+    <DashboardLayout>
+      <div className="container mx-auto p-6 space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold">Team Members</h1>
+            <p className="text-muted-foreground">Manage your Formula IHU team</p>
+          </div>
+          {isTeamLeader && (
+            <Button>
+              <UserPlus className="mr-2 h-4 w-4" />
+              Add Member
+            </Button>
+          )}
+        </div>
+
+        {loading ? (
+          <div className="text-center py-12">
+            <p className="text-muted-foreground">Loading team members...</p>
+          </div>
+        ) : members.length === 0 ? (
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-12">
+              <UsersIcon className="h-12 w-12 text-muted-foreground mb-4" />
+              <p className="text-lg font-medium mb-2">No team members yet</p>
+              <p className="text-sm text-muted-foreground mb-4">
+                Add your first team member to get started
+              </p>
+              {isTeamLeader && (
+                <Button>
+                  <UserPlus className="mr-2 h-4 w-4" />
+                  Add Member
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {members.map((member) => (
+              <Card key={member.id}>
+                <CardHeader>
+                  <div className="flex items-start gap-4">
+                    <Avatar className="h-12 w-12">
+                      <AvatarImage src={member.avatar_url || undefined} />
+                      <AvatarFallback className="bg-gradient-racing text-primary-foreground">
+                        {getInitials(member.full_name)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1">
+                      <CardTitle className="text-lg">{member.full_name}</CardTitle>
+                      <CardDescription className="text-sm">
+                        {member.department || "No department"}
+                        {member.sub_team && ` • ${member.sub_team}`}
+                      </CardDescription>
+                    </div>
+                    {getRoleBadge(member)}
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex items-center text-sm text-muted-foreground">
+                    <Mail className="mr-2 h-4 w-4" />
+                    <span className="truncate">{member.email}</span>
+                  </div>
+                  {member.phone && (
+                    <div className="flex items-center text-sm text-muted-foreground">
+                      <Phone className="mr-2 h-4 w-4" />
+                      {member.phone}
+                    </div>
+                  )}
+                  {member.skills && member.skills.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {member.skills.slice(0, 3).map((skill, idx) => (
+                        <Badge key={idx} variant="outline" className="text-xs">
+                          {skill}
+                        </Badge>
+                      ))}
+                      {member.skills.length > 3 && (
+                        <Badge variant="outline" className="text-xs">
+                          +{member.skills.length - 3}
+                        </Badge>
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
+    </DashboardLayout>
+  );
+};
+
+export default Team;

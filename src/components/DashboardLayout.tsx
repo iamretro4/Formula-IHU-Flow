@@ -11,9 +11,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Gauge, LayoutDashboard, CheckSquare, FileText, Users, LogOut, Menu } from "lucide-react";
+import { LayoutDashboard, CheckSquare, FileText, Users, LogOut, Menu } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import formulaIhuLogo from "@/assets/formula-ihu-logo.png";
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -65,22 +66,20 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
 
   const navigationItems = [
     { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
-    { icon: CheckSquare, label: "Tasks", path: "/dashboard/tasks" },
-    { icon: FileText, label: "Documents", path: "/dashboard/documents" },
-    { icon: Users, label: "Team", path: "/dashboard/team" },
+    { icon: CheckSquare, label: "Tasks", path: "/tasks" },
+    { icon: FileText, label: "Documents", path: "/documents" },
+    { icon: Users, label: "Team", path: "/team" },
   ];
 
   const NavContent = () => (
     <div className="flex flex-col h-full">
       <div className="p-6 border-b border-border">
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 bg-gradient-racing rounded-lg flex items-center justify-center">
-            <Gauge className="h-6 w-6 text-primary-foreground" />
-          </div>
-          <div>
-            <h2 className="font-bold text-lg">Formula IHU</h2>
-            <p className="text-xs text-muted-foreground">Management</p>
-          </div>
+        <div className="flex items-center justify-center">
+          <img 
+            src={formulaIhuLogo} 
+            alt="Formula IHU" 
+            className="h-12 object-contain"
+          />
         </div>
       </div>
 
@@ -124,9 +123,11 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <div className="h-12 w-12 bg-gradient-racing rounded-lg flex items-center justify-center mx-auto mb-4">
-            <Gauge className="h-7 w-7 text-primary-foreground animate-pulse" />
-          </div>
+          <img 
+            src={formulaIhuLogo} 
+            alt="Formula IHU" 
+            className="h-16 object-contain mx-auto mb-4 animate-pulse"
+          />
           <p className="text-muted-foreground">Loading...</p>
         </div>
       </div>
@@ -143,12 +144,11 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
       {/* Mobile Header & Sidebar */}
       <div className="md:hidden">
         <header className="fixed top-0 left-0 right-0 h-16 border-b border-border bg-card z-50 flex items-center justify-between px-4">
-          <div className="flex items-center gap-2">
-            <div className="h-8 w-8 bg-gradient-racing rounded-lg flex items-center justify-center">
-              <Gauge className="h-5 w-5 text-primary-foreground" />
-            </div>
-            <span className="font-bold">Formula IHU</span>
-          </div>
+          <img 
+            src={formulaIhuLogo} 
+            alt="Formula IHU" 
+            className="h-10 object-contain"
+          />
           <Sheet>
             <SheetTrigger asChild>
               <Button variant="ghost" size="icon">

@@ -7,7 +7,8 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Gauge } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import formulaIhuLogo from "@/assets/formula-ihu-logo.png";
 
 const Auth = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -89,15 +90,11 @@ const Auth = () => {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-muted/20 to-background p-4">
       <div className="w-full max-w-md">
         <div className="flex items-center justify-center mb-8">
-          <div className="flex items-center gap-3">
-            <div className="h-12 w-12 bg-gradient-racing rounded-lg flex items-center justify-center">
-              <Gauge className="h-7 w-7 text-primary-foreground" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold">Formula IHU</h1>
-              <p className="text-sm text-muted-foreground">Team Management</p>
-            </div>
-          </div>
+          <img 
+            src={formulaIhuLogo} 
+            alt="Formula IHU" 
+            className="h-16 object-contain"
+          />
         </div>
 
         <Card className="shadow-card">
@@ -184,10 +181,8 @@ const Auth = () => {
           </CardContent>
         </Card>
 
-        <div className="mt-4 text-center">
-          <Button variant="ghost" onClick={() => navigate("/")}>
-            Back to Home
-          </Button>
+        <div className="mt-4 text-center text-sm text-muted-foreground">
+          <p>Formula IHU Team Management Platform</p>
         </div>
       </div>
     </div>
