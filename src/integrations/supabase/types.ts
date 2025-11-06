@@ -142,7 +142,6 @@ export type Database = {
           id: string
           is_active: boolean | null
           phone: string | null
-          role: Database["public"]["Enums"]["user_role"]
           skills: string[] | null
           sub_team: string | null
           updated_at: string | null
@@ -157,7 +156,6 @@ export type Database = {
           id: string
           is_active?: boolean | null
           phone?: string | null
-          role?: Database["public"]["Enums"]["user_role"]
           skills?: string[] | null
           sub_team?: string | null
           updated_at?: string | null
@@ -172,7 +170,6 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           phone?: string | null
-          role?: Database["public"]["Enums"]["user_role"]
           skills?: string[] | null
           sub_team?: string | null
           updated_at?: string | null
@@ -299,14 +296,49 @@ export type Database = {
           },
         ]
       }
+      user_roles: {
+        Row: {
+          created_at: string
+          department: Database["public"]["Enums"]["department"] | null
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          department?: Database["public"]["Enums"]["department"] | null
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          department?: Database["public"]["Enums"]["department"] | null
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_user_role: {
+        Args: { _user_id: string }
+        Returns: Database["public"]["Enums"]["app_role"]
+      }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
+      app_role: "team_leader" | "director" | "chief" | "member"
       department: "electrical" | "mechanical" | "operations"
       document_type:
         | "design_spec"
@@ -323,7 +355,6 @@ export type Database = {
         | "review"
         | "completed"
         | "blocked"
-      user_role: "team_leader" | "director" | "chief" | "member"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -451,6 +482,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      app_role: ["team_leader", "director", "chief", "member"],
       department: ["electrical", "mechanical", "operations"],
       document_type: [
         "design_spec",
@@ -463,7 +495,6 @@ export const Constants = {
       ],
       task_priority: ["low", "medium", "high", "critical"],
       task_status: ["pending", "in_progress", "review", "completed", "blocked"],
-      user_role: ["team_leader", "director", "chief", "member"],
     },
   },
 } as const
