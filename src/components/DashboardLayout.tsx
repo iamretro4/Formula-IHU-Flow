@@ -11,7 +11,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { LayoutDashboard, CheckSquare, FileText, Users, LogOut, Menu } from "lucide-react";
+import { LayoutDashboard, CheckSquare, FileText, Users, LogOut, Menu, Target } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import formulaIhuLogo from "@/assets/formula-ihu-logo.png";
@@ -68,6 +68,7 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
     { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
     { icon: CheckSquare, label: "Tasks", path: "/tasks" },
     { icon: FileText, label: "Documents", path: "/documents" },
+    { icon: Target, label: "Projects", path: "/projects" },
     { icon: Users, label: "Team", path: "/team" },
   ];
 

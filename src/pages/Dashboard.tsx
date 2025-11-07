@@ -4,7 +4,8 @@ import DashboardLayout from "@/components/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { CheckSquare, FileText, Users, AlertCircle, Clock, CheckCircle2 } from "lucide-react";
+import { CheckSquare, FileText, Users, AlertCircle, Clock, CheckCircle2, TrendingUp, Calendar as CalendarIcon } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
 
 const Dashboard = () => {
   const [stats, setStats] = useState({
@@ -14,6 +15,8 @@ const Dashboard = () => {
     teamMembers: 0,
   });
   const [recentTasks, setRecentTasks] = useState<any[]>([]);
+  const [tasksByStatus, setTasksByStatus] = useState<any[]>([]);
+  const [tasksByPriority, setTasksByPriority] = useState<any[]>([]);
 
   useEffect(() => {
     const fetchDashboardData = async () => {
@@ -22,7 +25,7 @@ const Dashboard = () => {
 
       // Fetch stats
       const [tasksResult, docsResult, membersResult] = await Promise.all([
-        supabase.from("tasks").select("status"),
+        supabase.from("tasks").select("status, priority"),
         supabase.from("documents").select("is_approved"),
         supabase.from("profiles").select("id").eq("is_active", true),
       ]);
@@ -45,6 +48,22 @@ const Dashboard = () => {
         .limit(5);
 
       setRecentTasks(recentTasksData || []);
+
+      // Calculate task distribution
+      const statusCounts: Record<string, number> = {};
+      const priorityCounts: Record<string, number> = {};
+      
+      tasks.forEach(task => {
+        statusCounts[task.status] = (statusCounts[task.status] || 0) + 1;
+        priorityCounts[task.priority] = (priorityCounts[task.priority] || 0) + 1;
+      });
+
+      setTasksByStatus(
+        Object.entries(statusCounts).map(([name, value]) => ({ name: name.replace("_", " "), value }))
+      );
+      setTasksByPriority(
+        Object.entries(priorityCounts).map(([name, value]) => ({ name, value }))
+      );
     };
 
     fetchDashboardData();
@@ -202,6 +221,72 @@ const Dashboard = () => {
             )}
           </CardContent>
         </Card>
+
+        {/* Charts Section */}
+        {stats.totalTasks > 0 && (
+          <div className="grid gap-4 md:grid-cols-2">
+            <Card className="shadow-card">
+              <CardHeader>
+                <CardTitle>Tasks by Status</CardTitle>
+                <CardDescription>Distribution of task statuses</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={tasksByStatus}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                    <XAxis dataKey="name" className="text-xs" />
+                    <YAxis />
+                    <Tooltip 
+                      contentStyle={{ 
+                        backgroundColor: 'hsl(var(--card))',
+                        border: '1px solid hsl(var(--border))',
+                        borderRadius: '8px'
+                      }}
+                    />
+                    <Bar dataKey="value" fill="hsl(var(--primary))" radius={[8, 8, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            <Card className="shadow-card">
+              <CardHeader>
+                <CardTitle>Tasks by Priority</CardTitle>
+                <CardDescription>Priority distribution</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie
+                      data={tasksByPriority}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                      outerRadius={80}
+                      fill="hsl(var(--primary))"
+                      dataKey="value"
+                    >
+                      {tasksByPriority.map((entry, index) => (
+                        <Cell 
+                          key={`cell-${index}`} 
+                          fill={`hsl(var(--chart-${(index % 5) + 1}))`}
+                        />
+                      ))}
+                    </Pie>
+                    <Tooltip 
+                      contentStyle={{ 
+                        backgroundColor: 'hsl(var(--card))',
+                        border: '1px solid hsl(var(--border))',
+                        borderRadius: '8px'
+                      }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          </div>
+        )}
       </div>
     </DashboardLayout>
   );

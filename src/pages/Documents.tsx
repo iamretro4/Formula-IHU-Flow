@@ -8,6 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, FileText, Calendar, CheckCircle, AlertCircle, Clock } from "lucide-react";
 import { useUserRole } from "@/hooks/useUserRole";
+import { DocumentDialog } from "@/components/DocumentDialog";
 
 type Document = {
   id: string;
@@ -25,6 +26,7 @@ const Documents = () => {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -124,11 +126,17 @@ const Documents = () => {
             <h1 className="text-3xl font-bold">Document Repository</h1>
             <p className="text-muted-foreground">Manage Formula IHU compliance documents</p>
           </div>
-          <Button>
+          <Button onClick={() => setDialogOpen(true)}>
             <Plus className="mr-2 h-4 w-4" />
             Upload Document
           </Button>
         </div>
+
+        <DocumentDialog
+          open={dialogOpen}
+          onOpenChange={setDialogOpen}
+          onSuccess={fetchDocuments}
+        />
 
         {loading ? (
           <div className="text-center py-12">
@@ -142,7 +150,7 @@ const Documents = () => {
               <p className="text-sm text-muted-foreground mb-4">
                 Upload your first compliance document to get started
               </p>
-              <Button>
+              <Button onClick={() => setDialogOpen(true)}>
                 <Plus className="mr-2 h-4 w-4" />
                 Upload Document
               </Button>

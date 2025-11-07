@@ -8,6 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Calendar, User, AlertCircle } from "lucide-react";
 import { useUserRole } from "@/hooks/useUserRole";
+import { TaskDialog } from "@/components/TaskDialog";
 
 type Task = {
   id: string;
@@ -27,6 +28,8 @@ const Tasks = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<Task | undefined>(undefined);
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -125,12 +128,19 @@ const Tasks = () => {
             <p className="text-muted-foreground">Manage and track team tasks</p>
           </div>
           {isLeadership && (
-            <Button>
+            <Button onClick={() => { setSelectedTask(undefined); setDialogOpen(true); }}>
               <Plus className="mr-2 h-4 w-4" />
               Create Task
             </Button>
           )}
         </div>
+
+        <TaskDialog
+          open={dialogOpen}
+          onOpenChange={setDialogOpen}
+          task={selectedTask}
+          onSuccess={fetchTasks}
+        />
 
         {loading ? (
           <div className="text-center py-12">
@@ -145,7 +155,7 @@ const Tasks = () => {
                 Create your first task to get started
               </p>
               {isLeadership && (
-                <Button>
+                <Button onClick={() => { setSelectedTask(undefined); setDialogOpen(true); }}>
                   <Plus className="mr-2 h-4 w-4" />
                   Create Task
                 </Button>
@@ -155,7 +165,11 @@ const Tasks = () => {
         ) : (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {tasks.map((task) => (
-              <Card key={task.id} className={`border-l-4 ${getPriorityColor(task.priority)}`}>
+              <Card 
+                key={task.id} 
+                className={`border-l-4 ${getPriorityColor(task.priority)} cursor-pointer hover:shadow-hover transition-shadow`}
+                onClick={() => { setSelectedTask(task); setDialogOpen(true); }}
+              >
                 <CardHeader>
                   <div className="flex items-start justify-between">
                     <CardTitle className="text-lg">{task.title}</CardTitle>
