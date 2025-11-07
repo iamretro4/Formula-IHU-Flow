@@ -10,8 +10,9 @@ import { useToast } from "@/hooks/use-toast";
 import { Plus, Calendar, User, AlertCircle, Search } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
-import { useUserRole } from "@/hooks/useUserRole";
 import { TaskDialog } from "@/components/TaskDialog";
+import { BulkOperations } from "@/components/BulkOperations";
+import { Checkbox } from "@/components/ui/checkbox";
 
 type Task = {
   id: string;
@@ -19,11 +20,15 @@ type Task = {
   description: string | null;
   status: string;
   priority: string;
+  difficulty?: string;
   due_date: string | null;
   assigned_to: string | null;
+  assigned_to_profile: { id: string; full_name: string } | null;
+  project_id: string;
   created_at: string;
-  profiles: {
-    full_name: string;
+  projects: {
+    id: string;
+    name: string;
   } | null;
 };
 
@@ -37,6 +42,7 @@ const Tasks = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
+  const [selectedTasks, setSelectedTasks] = useState<string[]>([]);
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -60,7 +66,7 @@ const Tasks = () => {
     return () => subscription.unsubscribe();
   }, [navigate]);
 
-  const { userRole, isLeadership } = useUserRole(user?.id);
+  // All users are admins - no role checks needed
 
   useEffect(() => {
     if (user) {
@@ -72,26 +78,36 @@ const Tasks = () => {
     try {
       const { data, error } = await supabase
         .from("tasks")
-        .select("*")
+        .select("*, projects(id, name)")
         .order("created_at", { ascending: false });
 
       if (error) throw error;
 
-      // Fetch assigned user profiles separately
-      const tasksWithProfiles = await Promise.all(
-        (data || []).map(async (task) => {
-          if (task.assigned_to) {
-            const { data: profile } = await supabase
-              .from("profiles")
-              .select("full_name")
-              .eq("id", task.assigned_to)
-              .single();
-            
-            return { ...task, profiles: profile };
-          }
-          return { ...task, profiles: null };
-        })
-      );
+      // Fetch profiles for assigned users separately to avoid relationship ambiguity
+      const assignedUserIds = [...new Set((data || [])
+        .map((t: any) => t.assigned_to)
+        .filter(Boolean))];
+      
+      let profilesMap: Record<string, { id: string; full_name: string }> = {};
+      if (assignedUserIds.length > 0) {
+        const { data: profilesData } = await supabase
+          .from("profiles")
+          .select("id, full_name")
+          .in("id", assignedUserIds);
+        
+        if (profilesData) {
+          profilesMap = profilesData.reduce((acc, profile) => {
+            acc[profile.id] = profile;
+            return acc;
+          }, {} as Record<string, { id: string; full_name: string }>);
+        }
+      }
+
+      // Map tasks with profile data
+      const tasksWithProfiles = (data || []).map((task: any) => ({
+        ...task,
+        assigned_to_profile: task.assigned_to ? profilesMap[task.assigned_to] || null : null,
+      }));
 
       setTasks(tasksWithProfiles);
       setFilteredTasks(tasksWithProfiles);
@@ -131,6 +147,33 @@ const Tasks = () => {
     setFilteredTasks(filtered);
   }, [tasks, searchQuery, statusFilter, priorityFilter]);
 
+  const handleBulkAction = async (action: string, taskIds: string[]) => {
+    try {
+      if (action === "complete") {
+        const { error } = await supabase
+          .from("tasks")
+          .update({ status: "completed", completion_date: new Date().toISOString() })
+          .in("id", taskIds);
+        if (error) throw error;
+      } else if (action === "delete") {
+        const { error } = await supabase
+          .from("tasks")
+          .delete()
+          .in("id", taskIds);
+        if (error) throw error;
+      } else if (action === "in_progress") {
+        const { error } = await supabase
+          .from("tasks")
+          .update({ status: "in_progress" })
+          .in("id", taskIds);
+        if (error) throw error;
+      }
+      fetchTasks();
+    } catch (error: any) {
+      throw error;
+    }
+  };
+
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
       pending: "bg-muted text-muted-foreground",
@@ -154,33 +197,31 @@ const Tasks = () => {
 
   return (
     <DashboardLayout>
-      <div className="container mx-auto p-6 space-y-6">
-        <div className="flex items-center justify-between">
+      <div className="container mx-auto p-4 sm:p-6 space-y-4 sm:space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold">Task Management</h1>
-            <p className="text-muted-foreground">Manage and track team tasks</p>
+            <h1 className="text-2xl sm:text-3xl font-bold">Task Management</h1>
+            <p className="text-sm sm:text-base text-muted-foreground">Manage and track team tasks</p>
           </div>
-          {isLeadership && (
-            <Button onClick={() => { setSelectedTask(undefined); setDialogOpen(true); }}>
-              <Plus className="mr-2 h-4 w-4" />
-              Create Task
-            </Button>
-          )}
+          <Button onClick={() => { setSelectedTask(undefined); setDialogOpen(true); }} className="touch-target w-full sm:w-auto">
+            <Plus className="mr-2 h-4 w-4" />
+            Create Task
+          </Button>
         </div>
 
         {/* Search and Filters */}
-        <div className="flex flex-col md:flex-row gap-4">
+        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search tasks by title or description..."
+              placeholder="Search tasks..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
+              className="pl-10 touch-target"
             />
           </div>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-full md:w-[180px]">
+            <SelectTrigger className="w-full sm:w-[180px] touch-target">
               <SelectValue placeholder="Filter by status" />
             </SelectTrigger>
             <SelectContent>
@@ -193,7 +234,7 @@ const Tasks = () => {
             </SelectContent>
           </Select>
           <Select value={priorityFilter} onValueChange={setPriorityFilter}>
-            <SelectTrigger className="w-full md:w-[180px]">
+            <SelectTrigger className="w-full sm:w-[180px] touch-target">
               <SelectValue placeholder="Filter by priority" />
             </SelectTrigger>
             <SelectContent>
@@ -214,7 +255,7 @@ const Tasks = () => {
         />
 
         {loading ? (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
             {[1, 2, 3, 4, 5, 6].map((i) => (
               <Card key={i}>
                 <CardHeader>
@@ -236,12 +277,10 @@ const Tasks = () => {
               <p className="text-sm text-muted-foreground mb-4">
                 Create your first task to get started
               </p>
-              {isLeadership && (
-                <Button onClick={() => { setSelectedTask(undefined); setDialogOpen(true); }}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Create Task
-                </Button>
-              )}
+              <Button onClick={() => { setSelectedTask(undefined); setDialogOpen(true); }}>
+                <Plus className="mr-2 h-4 w-4" />
+                Create Task
+              </Button>
             </CardContent>
           </Card>
         ) : filteredTasks.length === 0 ? (
@@ -257,43 +296,77 @@ const Tasks = () => {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {filteredTasks.map((task) => (
-              <Card 
+          <div className="space-y-4">
+            <BulkOperations
+              items={filteredTasks}
+              selectedItems={selectedTasks}
+              onSelectionChange={setSelectedTasks}
+              onBulkAction={handleBulkAction}
+              availableActions={[
+                { label: "Mark as Complete", value: "complete" },
+                { label: "Mark as In Progress", value: "in_progress" },
+                { label: "Delete", value: "delete", variant: "destructive" },
+              ]}
+            />
+            <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+              {filteredTasks.map((task) => (
+                <Card 
                 key={task.id} 
-                className={`border-l-4 ${getPriorityColor(task.priority)} cursor-pointer hover:shadow-hover transition-shadow`}
-                onClick={() => { setSelectedTask(task); setDialogOpen(true); }}
+                className={`border-l-4 ${getPriorityColor(task.priority)} hover:shadow-hover transition-shadow ${
+                  selectedTasks.includes(task.id) ? "ring-2 ring-primary" : ""
+                }`}
               >
-                <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <CardTitle className="text-lg">{task.title}</CardTitle>
-                    <Badge className={getStatusColor(task.status)}>
-                      {task.status.replace("_", " ")}
-                    </Badge>
+                <div className="flex items-start gap-2 p-3 sm:p-4">
+                  <Checkbox
+                    checked={selectedTasks.includes(task.id)}
+                    onCheckedChange={(checked) => {
+                      if (checked) {
+                        setSelectedTasks([...selectedTasks, task.id]);
+                      } else {
+                        setSelectedTasks(selectedTasks.filter(id => id !== task.id));
+                      }
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="touch-target"
+                  />
+                  <div 
+                    className="flex-1 cursor-pointer min-w-0"
+                    onClick={() => { setSelectedTask(task); setDialogOpen(true); }}
+                  >
+                    <CardHeader className="p-0 pb-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <CardTitle className="text-base sm:text-lg truncate">{task.title}</CardTitle>
+                        <Badge className={getStatusColor(task.status)}>
+                          <span className="hidden sm:inline">{task.status.replace("_", " ")}</span>
+                          <span className="sm:hidden text-xs">{task.status.replace("_", " ").substring(0, 3)}</span>
+                        </Badge>
+                      </div>
+                      <CardDescription className="line-clamp-2 text-sm">
+                        {task.description || "No description"}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="p-0 space-y-2">
+                      {task.due_date && (
+                        <div className="flex items-center text-sm text-muted-foreground">
+                          <Calendar className="mr-2 h-4 w-4" />
+                          {new Date(task.due_date).toLocaleDateString()}
+                        </div>
+                      )}
+                      {task.assigned_to_profile && (
+                        <div className="flex items-center text-sm text-muted-foreground">
+                          <User className="mr-2 h-4 w-4" />
+                          {task.assigned_to_profile.full_name}
+                        </div>
+                      )}
+                      <Badge variant="outline" className="text-xs">
+                        {task.priority}
+                      </Badge>
+                    </CardContent>
                   </div>
-                  <CardDescription className="line-clamp-2">
-                    {task.description || "No description"}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  {task.due_date && (
-                    <div className="flex items-center text-sm text-muted-foreground">
-                      <Calendar className="mr-2 h-4 w-4" />
-                      {new Date(task.due_date).toLocaleDateString()}
-                    </div>
-                  )}
-                  {task.profiles && (
-                    <div className="flex items-center text-sm text-muted-foreground">
-                      <User className="mr-2 h-4 w-4" />
-                      {task.profiles.full_name}
-                    </div>
-                  )}
-                  <Badge variant="outline" className="text-xs">
-                    {task.priority}
-                  </Badge>
-                </CardContent>
+                </div>
               </Card>
             ))}
+            </div>
           </div>
         )}
       </div>

@@ -112,23 +112,23 @@ const Dashboard = () => {
 
   return (
     <DashboardLayout>
-      <div className="space-y-8">
+      <div className="space-y-4 sm:space-y-6 lg:space-y-8">
         <div>
-          <h1 className="text-3xl font-bold mb-2">Dashboard</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-2xl sm:text-3xl font-bold mb-2">Dashboard</h1>
+          <p className="text-sm sm:text-base text-muted-foreground">
             Welcome back! Here's an overview of your team's progress.
           </p>
         </div>
 
         {/* Stats Grid */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-3 sm:gap-4 grid-cols-2 md:grid-cols-2 lg:grid-cols-4">
           <Card className="shadow-card hover:shadow-hover transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-              <CardTitle className="text-sm font-medium">Total Tasks</CardTitle>
+              <CardTitle className="text-xs sm:text-sm font-medium">Total Tasks</CardTitle>
               <CheckSquare className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats.totalTasks}</div>
+              <div className="text-xl sm:text-2xl font-bold">{stats.totalTasks}</div>
               <p className="text-xs text-muted-foreground mt-1">
                 {stats.completedTasks} completed
               </p>
@@ -224,14 +224,15 @@ const Dashboard = () => {
 
         {/* Charts Section */}
         {stats.totalTasks > 0 && (
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
             <Card className="shadow-card">
               <CardHeader>
-                <CardTitle>Tasks by Status</CardTitle>
-                <CardDescription>Distribution of task statuses</CardDescription>
+                <CardTitle className="text-lg sm:text-xl">Tasks by Status</CardTitle>
+                <CardDescription className="text-sm">Distribution of task statuses</CardDescription>
               </CardHeader>
               <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
+                <div className="mobile-scroll">
+                  <ResponsiveContainer width="100%" height={250} className="min-w-[300px]">
                   <BarChart data={tasksByStatus}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
                     <XAxis dataKey="name" className="text-xs" />
@@ -245,17 +246,19 @@ const Dashboard = () => {
                     />
                     <Bar dataKey="value" fill="hsl(var(--primary))" radius={[8, 8, 0, 0]} />
                   </BarChart>
-                </ResponsiveContainer>
+                  </ResponsiveContainer>
+                </div>
               </CardContent>
             </Card>
 
             <Card className="shadow-card">
               <CardHeader>
-                <CardTitle>Tasks by Priority</CardTitle>
-                <CardDescription>Priority distribution</CardDescription>
+                <CardTitle className="text-lg sm:text-xl">Tasks by Priority</CardTitle>
+                <CardDescription className="text-sm">Priority distribution</CardDescription>
               </CardHeader>
               <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
+                <div className="mobile-scroll">
+                  <ResponsiveContainer width="100%" height={250} className="min-w-[300px]">
                   <PieChart>
                     <Pie
                       data={tasksByPriority}
@@ -282,7 +285,8 @@ const Dashboard = () => {
                       }}
                     />
                   </PieChart>
-                </ResponsiveContainer>
+                  </ResponsiveContainer>
+                </div>
               </CardContent>
             </Card>
           </div>

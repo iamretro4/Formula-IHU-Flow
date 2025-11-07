@@ -9,6 +9,12 @@ import Tasks from "./pages/Tasks";
 import Documents from "./pages/Documents";
 import Team from "./pages/Team";
 import Projects from "./pages/Projects";
+import ApprovalWorkflows from "./pages/ApprovalWorkflows";
+import Budgets from "./pages/Budgets";
+import Communications from "./pages/Communications";
+import GanttChart from "./pages/GanttChart";
+import CalendarView from "./pages/CalendarView";
+import ActivityLog from "./pages/ActivityLog";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -24,8 +30,14 @@ const App = () => (
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/tasks" element={<Tasks />} />
           <Route path="/documents" element={<Documents />} />
-          <Route path="/team" element={<Team />} />
+          <Route path="/approval-workflows" element={<ApprovalWorkflows />} />
           <Route path="/projects" element={<Projects />} />
+          <Route path="/gantt-chart" element={<GanttChart />} />
+          <Route path="/calendar" element={<CalendarView />} />
+          <Route path="/activity-log" element={<ActivityLog />} />
+          <Route path="/budgets" element={<Budgets />} />
+          <Route path="/communications" element={<Communications />} />
+          <Route path="/team" element={<Team />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

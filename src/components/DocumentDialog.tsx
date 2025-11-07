@@ -14,9 +14,10 @@ type DocumentDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
+  document?: any;
 };
 
-export function DocumentDialog({ open, onOpenChange, onSuccess }: DocumentDialogProps) {
+export function DocumentDialog({ open, onOpenChange, onSuccess, document }: DocumentDialogProps) {
   const [loading, setLoading] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [formData, setFormData] = useState({
@@ -28,7 +29,17 @@ export function DocumentDialog({ open, onOpenChange, onSuccess }: DocumentDialog
   const { toast } = useToast();
 
   useEffect(() => {
-    if (!open) {
+    if (open && document) {
+      setFormData({
+        title: document.title || "",
+        description: document.description || "",
+        document_type: document.document_type || "engineering_report",
+        submission_deadline: document.submission_deadline 
+          ? new Date(document.submission_deadline).toISOString().split('T')[0] 
+          : "",
+      });
+      setFile(null);
+    } else if (!open) {
       setFormData({
         title: "",
         description: "",
@@ -37,7 +48,7 @@ export function DocumentDialog({ open, onOpenChange, onSuccess }: DocumentDialog
       });
       setFile(null);
     }
-  }, [open]);
+  }, [open, document]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -119,13 +130,30 @@ export function DocumentDialog({ open, onOpenChange, onSuccess }: DocumentDialog
         submission_deadline: formData.submission_deadline ? new Date(formData.submission_deadline).toISOString() : null,
       };
 
-      const { error } = await supabase
-        .from("documents")
-        .insert([docData]);
+      if (document) {
+        // Update existing document
+        const { error } = await supabase
+          .from("documents")
+          .update({
+            ...docData,
+            file_url: file_url || document.file_url, // Keep existing file if no new file uploaded
+            version: document.version + 1,
+            parent_version_id: document.id,
+          })
+          .eq("id", document.id);
 
-      if (error) throw error;
+        if (error) throw error;
+        toast({ title: "Document updated successfully" });
+      } else {
+        // Create new document
+        const { error } = await supabase
+          .from("documents")
+          .insert([docData]);
 
-      toast({ title: "Document uploaded successfully" });
+        if (error) throw error;
+        toast({ title: "Document uploaded successfully" });
+      }
+      
       onSuccess();
       onOpenChange(false);
     } catch (error: any) {
@@ -143,9 +171,9 @@ export function DocumentDialog({ open, onOpenChange, onSuccess }: DocumentDialog
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Upload Document</DialogTitle>
+          <DialogTitle>{document ? "Edit Document" : "Upload Document"}</DialogTitle>
           <DialogDescription>
-            Add a new compliance document to the repository
+            {document ? "Update document details" : "Add a new compliance document to the repository"}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -238,7 +266,7 @@ export function DocumentDialog({ open, onOpenChange, onSuccess }: DocumentDialog
               Cancel
             </Button>
             <Button type="submit" disabled={loading}>
-              {loading ? "Uploading..." : "Upload Document"}
+              {loading ? (document ? "Updating..." : "Uploading...") : (document ? "Update Document" : "Upload Document")}
             </Button>
           </DialogFooter>
         </form>

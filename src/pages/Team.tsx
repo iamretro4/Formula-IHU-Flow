@@ -9,8 +9,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { UserPlus, Mail, Phone, Users as UsersIcon, Edit } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useUserRole } from "@/hooks/useUserRole";
 import { TeamMemberDialog } from "@/components/TeamMemberDialog";
+import { WorkloadProductivityCard } from "@/components/WorkloadProductivityCard";
+import { calculateAllWorkloads, calculateAllProductivity } from "@/lib/workload";
 
 type Profile = {
   id: string;
@@ -34,10 +35,12 @@ type UserWithRole = Profile & {
 
 const Team = () => {
   const [members, setMembers] = useState<UserWithRole[]>([]);
+  const [tasks, setTasks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedMember, setSelectedMember] = useState<UserWithRole | undefined>(undefined);
+  const [showWorkload, setShowWorkload] = useState(true);
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -61,13 +64,28 @@ const Team = () => {
     return () => subscription.unsubscribe();
   }, [navigate]);
 
-  const { isTeamLeader } = useUserRole(user?.id);
+  // All users are admins - no role checks needed
 
   useEffect(() => {
     if (user) {
       fetchTeamMembers();
+      fetchTasks();
     }
   }, [user]);
+
+  const fetchTasks = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("tasks")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      setTasks(data || []);
+    } catch (error: any) {
+      console.error("Error fetching tasks:", error);
+    }
+  };
 
   const fetchTeamMembers = async () => {
     try {
@@ -103,21 +121,7 @@ const Team = () => {
     }
   };
 
-  const getRoleBadge = (member: UserWithRole) => {
-    const role = member.user_roles?.[0]?.role || "member";
-    const colors: Record<string, string> = {
-      team_leader: "bg-primary text-primary-foreground",
-      director: "bg-secondary text-secondary-foreground",
-      chief: "bg-accent text-accent-foreground",
-      member: "bg-muted text-muted-foreground",
-    };
-    
-    return (
-      <Badge className={colors[role]}>
-        {role.replace("_", " ").toUpperCase()}
-      </Badge>
-    );
-  };
+  // Role badges removed - everyone is admin
 
   const getInitials = (name: string) => {
     return name
@@ -136,12 +140,18 @@ const Team = () => {
             <h1 className="text-3xl font-bold">Team Members</h1>
             <p className="text-muted-foreground">Manage your Formula IHU team</p>
           </div>
-          {isTeamLeader && (
+          <div className="flex gap-2">
+            <Button
+              variant={showWorkload ? "default" : "outline"}
+              onClick={() => setShowWorkload(!showWorkload)}
+            >
+              {showWorkload ? "Hide" : "Show"} Workload & Productivity
+            </Button>
             <Button onClick={() => { setSelectedMember(undefined); setDialogOpen(true); }}>
               <UserPlus className="mr-2 h-4 w-4" />
               Add Member
             </Button>
-          )}
+          </div>
         </div>
 
         <TeamMemberDialog
@@ -150,6 +160,36 @@ const Team = () => {
           member={selectedMember}
           onSuccess={fetchTeamMembers}
         />
+
+        {showWorkload && !loading && members.length > 0 && (
+          <div className="space-y-4">
+            <h2 className="text-xl font-semibold">Workload & Productivity</h2>
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {members.map((member) => {
+                const workloads = calculateAllWorkloads(
+                  [{ id: member.id, full_name: member.full_name }],
+                  tasks
+                );
+                const productivities = calculateAllProductivity(
+                  [{ id: member.id, full_name: member.full_name }],
+                  tasks
+                );
+                const workload = workloads[0];
+                const productivity = productivities[0];
+
+                if (!workload || !productivity) return null;
+
+                return (
+                  <WorkloadProductivityCard
+                    key={member.id}
+                    workload={workload}
+                    productivity={productivity}
+                  />
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {loading ? (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -179,12 +219,10 @@ const Team = () => {
               <p className="text-sm text-muted-foreground mb-4">
                 Add your first team member to get started
               </p>
-              {isTeamLeader && (
-                <Button onClick={() => { setSelectedMember(undefined); setDialogOpen(true); }}>
-                  <UserPlus className="mr-2 h-4 w-4" />
-                  Add Member
-                </Button>
-              )}
+              <Button onClick={() => { setSelectedMember(undefined); setDialogOpen(true); }}>
+                <UserPlus className="mr-2 h-4 w-4" />
+                Add Member
+              </Button>
             </CardContent>
           </Card>
         ) : (
@@ -204,22 +242,19 @@ const Team = () => {
                         <div>
                           <CardTitle className="text-lg">{member.full_name}</CardTitle>
                           <CardDescription className="text-sm">
-                            {member.department || "No department"}
-                            {member.sub_team && ` • ${member.sub_team}`}
+                            {member.sub_team || "No sub-team"}
                           </CardDescription>
                         </div>
-                        {isTeamLeader && (
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            onClick={() => { setSelectedMember(member); setDialogOpen(true); }}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                        )}
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          onClick={() => { setSelectedMember(member); setDialogOpen(true); }}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
                       </div>
                     </div>
-                    {getRoleBadge(member)}
+                    <Badge variant="outline">Admin</Badge>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-3">

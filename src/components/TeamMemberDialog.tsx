@@ -21,9 +21,7 @@ export function TeamMemberDialog({ open, onOpenChange, member, onSuccess }: Team
     full_name: "",
     email: "",
     phone: "",
-    department: "",
     sub_team: "",
-    role: "member",
   });
   const { toast } = useToast();
 
@@ -33,18 +31,14 @@ export function TeamMemberDialog({ open, onOpenChange, member, onSuccess }: Team
         full_name: member.full_name || "",
         email: member.email || "",
         phone: member.phone || "",
-        department: member.department || "",
         sub_team: member.sub_team || "",
-        role: member.user_roles?.[0]?.role || "member",
       });
     } else if (open && !member) {
       setFormData({
         full_name: "",
         email: "",
         phone: "",
-        department: "",
         sub_team: "",
-        role: "member",
       });
     }
   }, [open, member]);
@@ -61,44 +55,11 @@ export function TeamMemberDialog({ open, onOpenChange, member, onSuccess }: Team
           .update({
             full_name: formData.full_name,
             phone: formData.phone || null,
-            department: formData.department as Database["public"]["Enums"]["department"] || null,
             sub_team: formData.sub_team || null,
           })
           .eq("id", member.id);
 
         if (profileError) throw profileError;
-
-        // Update or insert role (UPSERT)
-        // First, check if role exists
-        const { data: existingRole } = await supabase
-          .from("user_roles")
-          .select("id")
-          .eq("user_id", member.id)
-          .maybeSingle();
-
-        if (existingRole) {
-          // Update existing role
-          const { error: roleError } = await supabase
-            .from("user_roles")
-            .update({
-              role: formData.role as Database["public"]["Enums"]["app_role"],
-              department: formData.department as Database["public"]["Enums"]["department"] || null,
-            })
-            .eq("id", existingRole.id);
-
-          if (roleError) throw roleError;
-        } else {
-          // Insert new role
-          const { error: roleError } = await supabase
-            .from("user_roles")
-            .insert({
-              user_id: member.id,
-              role: formData.role as Database["public"]["Enums"]["app_role"],
-              department: formData.department as Database["public"]["Enums"]["department"] || null,
-            });
-
-          if (roleError) throw roleError;
-        }
 
         toast({ title: "Team member updated successfully" });
       } else {
@@ -154,57 +115,24 @@ export function TeamMemberDialog({ open, onOpenChange, member, onSuccess }: Team
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="phone">Phone</Label>
-              <Input
-                id="phone"
-                type="tel"
-                value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="role">Role *</Label>
-              <Select value={formData.role} onValueChange={(value) => setFormData({ ...formData, role: value })}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="member">Member</SelectItem>
-                  <SelectItem value="chief">Chief</SelectItem>
-                  <SelectItem value="director">Director</SelectItem>
-                  <SelectItem value="team_leader">Team Leader</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+          <div className="space-y-2">
+            <Label htmlFor="phone">Phone</Label>
+            <Input
+              id="phone"
+              type="tel"
+              value={formData.phone}
+              onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+            />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="department">Department</Label>
-              <Select value={formData.department} onValueChange={(value) => setFormData({ ...formData, department: value })}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select department" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="electrical">Electrical</SelectItem>
-                  <SelectItem value="mechanical">Mechanical</SelectItem>
-                  <SelectItem value="operations">Operations</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="sub_team">Sub-Team</Label>
-              <Input
-                id="sub_team"
-                value={formData.sub_team}
-                onChange={(e) => setFormData({ ...formData, sub_team: e.target.value })}
-                placeholder="e.g., Powertrain, Chassis"
-              />
-            </div>
+          <div className="space-y-2">
+            <Label htmlFor="sub_team">Sub-Team</Label>
+            <Input
+              id="sub_team"
+              value={formData.sub_team}
+              onChange={(e) => setFormData({ ...formData, sub_team: e.target.value })}
+              placeholder="e.g., Powertrain, Chassis"
+            />
           </div>
 
           <DialogFooter>

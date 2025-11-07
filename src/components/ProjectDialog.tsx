@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import type { Database } from "@/integrations/supabase/types";
@@ -24,8 +25,20 @@ export function ProjectDialog({ open, onOpenChange, project, onSuccess }: Projec
     status: "planning",
     start_date: "",
     end_date: "",
-    competition_date: "",
+    tags: [] as string[],
   });
+  const [tagInput, setTagInput] = useState("");
+  
+  const addTag = () => {
+    if (tagInput.trim() && !formData.tags.includes(tagInput.trim())) {
+      setFormData({ ...formData, tags: [...formData.tags, tagInput.trim()] });
+      setTagInput("");
+    }
+  };
+
+  const removeTag = (tagToRemove: string) => {
+    setFormData({ ...formData, tags: formData.tags.filter(tag => tag !== tagToRemove) });
+  };
   const { toast } = useToast();
 
   useEffect(() => {
@@ -36,7 +49,7 @@ export function ProjectDialog({ open, onOpenChange, project, onSuccess }: Projec
         status: project.status || "planning",
         start_date: project.start_date ? new Date(project.start_date).toISOString().split('T')[0] : "",
         end_date: project.end_date ? new Date(project.end_date).toISOString().split('T')[0] : "",
-        competition_date: project.competition_date ? new Date(project.competition_date).toISOString().split('T')[0] : "",
+        tags: (project.tags as string[]) || [],
       });
     } else if (open && !project) {
       setFormData({
@@ -45,7 +58,7 @@ export function ProjectDialog({ open, onOpenChange, project, onSuccess }: Projec
         status: "planning",
         start_date: "",
         end_date: "",
-        competition_date: "",
+        tags: [],
       });
     }
   }, [open, project]);
@@ -64,7 +77,7 @@ export function ProjectDialog({ open, onOpenChange, project, onSuccess }: Projec
         status: formData.status,
         start_date: formData.start_date,
         end_date: formData.end_date,
-        competition_date: formData.competition_date || null,
+        tags: formData.tags.length > 0 ? formData.tags : null,
         created_by: user.id,
       };
 
@@ -168,13 +181,33 @@ export function ProjectDialog({ open, onOpenChange, project, onSuccess }: Projec
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="competition_date">Competition Date</Label>
-            <Input
-              id="competition_date"
-              type="date"
-              value={formData.competition_date}
-              onChange={(e) => setFormData({ ...formData, competition_date: e.target.value })}
-            />
+            <Label htmlFor="tags">Tags</Label>
+            <div className="flex gap-2">
+              <Input
+                id="tags"
+                placeholder="Add a tag and press Enter"
+                value={tagInput}
+                onChange={(e) => setTagInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    addTag();
+                  }
+                }}
+              />
+              <Button type="button" onClick={addTag} variant="outline">
+                Add
+              </Button>
+            </div>
+            {formData.tags.length > 0 && (
+              <div className="flex flex-wrap gap-2 mt-2">
+                {formData.tags.map((tag) => (
+                  <Badge key={tag} variant="secondary" className="cursor-pointer" onClick={() => removeTag(tag)}>
+                    {tag} ×
+                  </Badge>
+                ))}
+              </div>
+            )}
           </div>
 
           <DialogFooter>

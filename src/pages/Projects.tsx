@@ -9,9 +9,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Calendar, Target, TrendingUp, CheckCircle2, Edit } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useUserRole } from "@/hooks/useUserRole";
 import { ProjectDialog } from "@/components/ProjectDialog";
 import { MilestoneDialog } from "@/components/MilestoneDialog";
+import { ProjectTasksView } from "@/components/ProjectTasksView";
 
 type Project = {
   id: string;
@@ -35,6 +35,7 @@ type Milestone = {
 const Projects = () => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [milestones, setMilestones] = useState<Record<string, Milestone[]>>({});
+  const [tasks, setTasks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
   const [projectDialogOpen, setProjectDialogOpen] = useState(false);
@@ -42,6 +43,7 @@ const Projects = () => {
   const [selectedProject, setSelectedProject] = useState<Project | undefined>(undefined);
   const [selectedProjectForMilestone, setSelectedProjectForMilestone] = useState<string>("");
   const [selectedMilestone, setSelectedMilestone] = useState<Milestone | undefined>(undefined);
+  const [expandedProject, setExpandedProject] = useState<string | null>(null);
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -65,7 +67,7 @@ const Projects = () => {
     return () => subscription.unsubscribe();
   }, [navigate]);
 
-  const { isLeadership } = useUserRole(user?.id);
+  // All users are admins - no role checks needed
 
   useEffect(() => {
     if (user) {
@@ -89,6 +91,42 @@ const Projects = () => {
 
       if (milestonesError) throw milestonesError;
 
+      // Fetch tasks with profiles and projects
+      // Note: tasks has both assigned_to and created_by foreign keys to profiles
+      // We'll fetch tasks first, then fetch profiles separately to avoid ambiguity
+      const { data: tasksDataRaw, error: tasksError } = await supabase
+        .from("tasks")
+        .select("*, projects(id, name)")
+        .order("created_at", { ascending: false });
+
+      if (tasksError) throw tasksError;
+
+      // Fetch profiles for assigned users
+      const assignedUserIds = [...new Set((tasksDataRaw || [])
+        .map((t: any) => t.assigned_to)
+        .filter(Boolean))];
+      
+      let profilesMap: Record<string, { id: string; full_name: string }> = {};
+      if (assignedUserIds.length > 0) {
+        const { data: profilesData } = await supabase
+          .from("profiles")
+          .select("id, full_name")
+          .in("id", assignedUserIds);
+        
+        if (profilesData) {
+          profilesMap = profilesData.reduce((acc, profile) => {
+            acc[profile.id] = profile;
+            return acc;
+          }, {} as Record<string, { id: string; full_name: string }>);
+        }
+      }
+
+      // Map tasks with profile data
+      const tasksData = (tasksDataRaw || []).map((task: any) => ({
+        ...task,
+        assigned_to_profile: task.assigned_to ? profilesMap[task.assigned_to] || null : null,
+      }));
+
       // Group milestones by project
       const milestonesByProject: Record<string, Milestone[]> = {};
       milestonesData?.forEach((milestone) => {
@@ -100,6 +138,7 @@ const Projects = () => {
 
       setProjects(projectsData || []);
       setMilestones(milestonesByProject);
+      setTasks(tasksData || []);
     } catch (error: any) {
       toast({
         variant: "destructive",
@@ -166,12 +205,10 @@ const Projects = () => {
             <h1 className="text-3xl font-bold">Projects & Milestones</h1>
             <p className="text-muted-foreground">Track project progress and timelines</p>
           </div>
-          {isLeadership && (
-            <Button onClick={() => { setSelectedProject(undefined); setProjectDialogOpen(true); }}>
-              <Plus className="mr-2 h-4 w-4" />
-              New Project
-            </Button>
-          )}
+          <Button onClick={() => { setSelectedProject(undefined); setProjectDialogOpen(true); }}>
+            <Plus className="mr-2 h-4 w-4" />
+            New Project
+          </Button>
         </div>
 
         <ProjectDialog
@@ -212,12 +249,10 @@ const Projects = () => {
               <p className="text-sm text-muted-foreground mb-4">
                 Create your first project to get started
               </p>
-              {isLeadership && (
-                <Button onClick={() => { setSelectedProject(undefined); setProjectDialogOpen(true); }}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  New Project
-                </Button>
-              )}
+              <Button onClick={() => { setSelectedProject(undefined); setProjectDialogOpen(true); }}>
+                <Plus className="mr-2 h-4 w-4" />
+                New Project
+              </Button>
             </CardContent>
           </Card>
         ) : (
@@ -234,15 +269,13 @@ const Projects = () => {
                       <div className="flex-1">
                         <div className="flex items-start justify-between mb-2">
                           <CardTitle className="text-2xl">{project.name}</CardTitle>
-                          {isLeadership && (
-                            <Button 
-                              variant="ghost" 
-                              size="icon"
-                              onClick={() => { setSelectedProject(project); setProjectDialogOpen(true); }}
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                          )}
+                          <Button 
+                            variant="ghost" 
+                            size="icon"
+                            onClick={() => { setSelectedProject(project); setProjectDialogOpen(true); }}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
                         </div>
                         <CardDescription className="text-base">
                           {project.description || "No description"}
@@ -303,20 +336,18 @@ const Projects = () => {
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
                         <h4 className="font-semibold text-sm">Milestones</h4>
-                        {isLeadership && (
-                          <Button 
-                            size="sm" 
-                            variant="outline"
-                            onClick={() => {
-                              setSelectedProjectForMilestone(project.id);
-                              setSelectedMilestone(undefined);
-                              setMilestoneDialogOpen(true);
-                            }}
-                          >
-                            <Plus className="h-3 w-3 mr-1" />
-                            Add
-                          </Button>
-                        )}
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={() => {
+                            setSelectedProjectForMilestone(project.id);
+                            setSelectedMilestone(undefined);
+                            setMilestoneDialogOpen(true);
+                          }}
+                        >
+                          <Plus className="h-3 w-3 mr-1" />
+                          Add
+                        </Button>
                       </div>
                       {projectMilestones.length > 0 ? (
                         <div className="space-y-2">
@@ -349,6 +380,26 @@ const Projects = () => {
                         <p className="text-sm text-muted-foreground text-center py-4">
                           No milestones yet. Click Add to create one.
                         </p>
+                      )}
+                    </div>
+
+                    {/* Tasks View Toggle */}
+                    <div className="space-y-3 pt-4 border-t">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                        onClick={() => setExpandedProject(expandedProject === project.id ? null : project.id)}
+                      >
+                        {expandedProject === project.id ? "Hide" : "Show"} Tasks
+                      </Button>
+                      {expandedProject === project.id && (
+                        <ProjectTasksView
+                          projectId={project.id}
+                          projectName={project.name}
+                          tasks={tasks}
+                          onTaskUpdate={fetchProjects}
+                        />
                       )}
                     </div>
                   </CardContent>

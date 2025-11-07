@@ -8,9 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, FileText, Calendar, CheckCircle, AlertCircle, Clock, Download, ThumbsUp, ThumbsDown, Search, Eye } from "lucide-react";
+import { Plus, FileText, Calendar, CheckCircle, AlertCircle, Clock, Download, ThumbsUp, ThumbsDown, Search, Eye, History, AlertTriangle, Euro } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useUserRole } from "@/hooks/useUserRole";
 import { DocumentDialog } from "@/components/DocumentDialog";
 import { FilePreviewDialog } from "@/components/FilePreviewDialog";
 
@@ -25,6 +24,13 @@ type Document = {
   is_approved: boolean;
   file_url: string | null;
   created_at: string;
+  parent_version_id?: string | null;
+  change_log?: string | null;
+  fsg_submission_id?: string | null;
+  fsg_submitted_at?: string | null;
+  penalty_amount?: number | null;
+  penalty_reason?: string | null;
+  late_submission_days?: number | null;
 };
 
 const Documents = () => {
@@ -33,6 +39,7 @@ const Documents = () => {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [selectedDocument, setSelectedDocument] = useState<Document | undefined>(undefined);
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -61,7 +68,7 @@ const Documents = () => {
     return () => subscription.unsubscribe();
   }, [navigate]);
 
-  const { isLeadership, isDirector } = useUserRole(user?.id);
+  // All users are admins - no role checks needed
 
   useEffect(() => {
     if (user) {
@@ -230,31 +237,34 @@ const Documents = () => {
 
   return (
     <DashboardLayout>
-      <div className="container mx-auto p-6 space-y-6">
-        <div className="flex items-center justify-between">
+      <div className="container mx-auto p-4 sm:p-6 space-y-4 sm:space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold">Document Repository</h1>
-            <p className="text-muted-foreground">Manage Formula IHU compliance documents</p>
+            <h1 className="text-2xl sm:text-3xl font-bold">Document Repository</h1>
+            <p className="text-sm sm:text-base text-muted-foreground">Manage Formula IHU compliance documents</p>
           </div>
-          <Button onClick={() => setDialogOpen(true)}>
+          <Button onClick={() => { 
+            setSelectedDocument(undefined); 
+            setDialogOpen(true); 
+          }} className="touch-target w-full sm:w-auto">
             <Plus className="mr-2 h-4 w-4" />
             Upload Document
           </Button>
         </div>
 
         {/* Search and Filters */}
-        <div className="flex flex-col md:flex-row gap-4">
+        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search documents by title or description..."
+              placeholder="Search documents..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
+              className="pl-10 touch-target"
             />
           </div>
           <Select value={typeFilter} onValueChange={setTypeFilter}>
-            <SelectTrigger className="w-full md:w-[200px]">
+            <SelectTrigger className="w-full sm:w-[200px] touch-target">
               <SelectValue placeholder="Filter by type" />
             </SelectTrigger>
             <SelectContent>
@@ -269,7 +279,7 @@ const Documents = () => {
             </SelectContent>
           </Select>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-full md:w-[180px]">
+            <SelectTrigger className="w-full sm:w-[180px] touch-target">
               <SelectValue placeholder="Filter by status" />
             </SelectTrigger>
             <SelectContent>
@@ -283,8 +293,12 @@ const Documents = () => {
 
         <DocumentDialog
           open={dialogOpen}
-          onOpenChange={setDialogOpen}
+          onOpenChange={(open) => {
+            setDialogOpen(open);
+            if (!open) setSelectedDocument(undefined);
+          }}
           onSuccess={fetchDocuments}
+          document={selectedDocument}
         />
 
         {previewFile && (
@@ -297,7 +311,7 @@ const Documents = () => {
         )}
 
         {loading ? (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
             {[1, 2, 3].map((i) => (
               <Card key={i}>
                 <CardHeader>
@@ -338,15 +352,15 @@ const Documents = () => {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
             {filteredDocuments.map((doc) => (
-              <Card key={doc.id}>
-                <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-start gap-3">
+              <Card key={doc.id} className="hover:shadow-md transition-shadow">
+                <CardHeader className="p-4">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-start gap-2 sm:gap-3 min-w-0 flex-1">
                       {getStatusIcon(doc)}
-                      <div className="flex-1">
-                        <CardTitle className="text-lg">{doc.title}</CardTitle>
+                      <div className="flex-1 min-w-0">
+                        <CardTitle className="text-base sm:text-lg truncate">{doc.title}</CardTitle>
                         <CardDescription className="text-xs mt-1">
                           {getDocumentTypeLabel(doc.document_type)} v{doc.version}
                         </CardDescription>
@@ -355,7 +369,7 @@ const Documents = () => {
                     {getStatusBadge(doc)}
                   </div>
                 </CardHeader>
-                <CardContent className="space-y-3">
+                <CardContent className="space-y-3 p-4 pt-0">
                   {doc.description && (
                     <p className="text-sm text-muted-foreground line-clamp-2">
                       {doc.description}
@@ -364,8 +378,15 @@ const Documents = () => {
                   {doc.submission_deadline && (
                     <div className="flex items-center text-sm">
                       <Calendar className="mr-2 h-4 w-4 text-muted-foreground" />
-                      <span className="text-muted-foreground">
+                      <span className={`${
+                        doc.submission_deadline && new Date(doc.submission_deadline) < new Date() && !doc.submitted_at
+                          ? "text-red-500 font-medium"
+                          : "text-muted-foreground"
+                      }`}>
                         Due: {new Date(doc.submission_deadline).toLocaleDateString()}
+                        {doc.submission_deadline && new Date(doc.submission_deadline) < new Date() && !doc.submitted_at && (
+                          <span className="ml-2">⚠️ Overdue</span>
+                        )}
                       </span>
                     </div>
                   )}
@@ -374,36 +395,90 @@ const Documents = () => {
                       Submitted: {new Date(doc.submitted_at).toLocaleDateString()}
                     </div>
                   )}
-                  <div className="flex gap-2 mt-2">
+                  {doc.penalty_amount && doc.penalty_amount > 0 && (
+                    <div className="flex items-center text-sm text-red-600">
+                      <Euro className="mr-2 h-4 w-4" />
+                      <span>Penalty: €{doc.penalty_amount.toLocaleString()}</span>
+                      {doc.penalty_reason && (
+                        <span className="ml-2 text-xs">({doc.penalty_reason})</span>
+                      )}
+                    </div>
+                  )}
+                  {doc.late_submission_days && doc.late_submission_days > 0 && (
+                    <div className="text-xs text-orange-600">
+                      Late by {doc.late_submission_days} day{doc.late_submission_days > 1 ? 's' : ''}
+                    </div>
+                  )}
+                  {doc.fsg_submission_id && (
+                    <div className="text-xs text-muted-foreground">
+                      FSG ID: {doc.fsg_submission_id}
+                    </div>
+                  )}
+                  {doc.parent_version_id && (
+                    <div className="flex items-center text-xs text-muted-foreground">
+                      <History className="mr-1 h-3 w-3" />
+                      <span>Version {doc.version} (has previous versions)</span>
+                    </div>
+                  )}
+                  {doc.change_log && (
+                    <div className="text-xs text-muted-foreground mt-1 p-2 bg-muted rounded">
+                      <strong>Changes:</strong> {doc.change_log}
+                    </div>
+                  )}
+                  <div className="flex gap-2 mt-2 flex-wrap">
+                    <Button 
+                      size="sm" 
+                      variant="outline"
+                      className="touch-target text-xs sm:text-sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedDocument(doc);
+                        setDialogOpen(true);
+                      }}
+                    >
+                      Edit
+                    </Button>
                     {doc.file_url && (
                       <>
                         <Button 
                           size="sm" 
                           variant="outline"
-                          onClick={() => {
+                          className="touch-target text-xs sm:text-sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
                             setPreviewFile({ url: doc.file_url, name: doc.title });
                             setPreviewOpen(true);
                           }}
                         >
-                          <Eye className="h-4 w-4 mr-2" />
-                          Preview
+                          <Eye className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                          <span className="hidden sm:inline">Preview</span>
+                          <span className="sm:hidden">View</span>
                         </Button>
                         <Button 
                           size="sm" 
                           variant="outline"
-                          onClick={() => handleDownloadDocument(doc)}
+                          className="touch-target text-xs sm:text-sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDownloadDocument(doc);
+                          }}
                         >
-                          <Download className="h-4 w-4 mr-2" />
-                          Download
+                          <Download className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                          <span className="hidden sm:inline">Download</span>
+                          <span className="sm:hidden">DL</span>
                         </Button>
                       </>
                     )}
-                    {isDirector && doc.submitted_at && !doc.is_approved && (
+                    {doc.submitted_at && !doc.is_approved && (
                       <Button 
                         size="sm"
-                        onClick={() => handleApproveDocument(doc.id)}
+                        className="touch-target text-xs sm:text-sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleApproveDocument(doc.id);
+                        }}
                       >
-                        <ThumbsUp className="h-4 w-4 mr-2" />
+                        <ThumbsUp className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
                         Approve
                       </Button>
                     )}

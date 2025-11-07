@@ -14,6 +14,7 @@ type FilePreviewDialogProps = {
 export function FilePreviewDialog({ open, onOpenChange, fileUrl, fileName }: FilePreviewDialogProps) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [fileType, setFileType] = useState<string>("");
+  const [textContent, setTextContent] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -48,14 +49,26 @@ export function FilePreviewDialog({ open, onOpenChange, fileUrl, fileName }: Fil
 
       // Determine file type
       const extension = fileName.split('.').pop()?.toLowerCase() || '';
-      const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(extension);
+      const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'].includes(extension);
       const isPdf = extension === 'pdf';
+      const isVideo = ['mp4', 'webm', 'ogg', 'mov', 'avi'].includes(extension);
+      const isAudio = ['mp3', 'wav', 'ogg', 'm4a'].includes(extension);
+      const isText = ['txt', 'md', 'csv', 'json', 'xml', 'log'].includes(extension);
 
-      if (isImage || isPdf) {
+      if (isImage || isPdf || isVideo || isAudio || isText) {
         const blob = new Blob([data]);
         const url = window.URL.createObjectURL(blob);
         setPreviewUrl(url);
-        setFileType(isImage ? 'image' : 'pdf');
+        if (isImage) setFileType('image');
+        else if (isPdf) setFileType('pdf');
+        else if (isVideo) setFileType('video');
+        else if (isAudio) setFileType('audio');
+        else if (isText) {
+          setFileType('text');
+          // Load text content
+          const text = await data.text();
+          setTextContent(text);
+        }
       } else {
         setError("Preview not available for this file type. Please download to view.");
       }
@@ -157,6 +170,26 @@ export function FilePreviewDialog({ open, onOpenChange, fileUrl, fileName }: Fil
                 className="w-full h-full border-0 rounded-lg"
                 title={fileName}
               />
+            </div>
+          ) : previewUrl && fileType === 'video' ? (
+            <div className="flex items-center justify-center">
+              <video
+                src={previewUrl}
+                controls
+                className="max-w-full max-h-[calc(90vh-200px)] rounded-lg"
+              >
+                Your browser does not support video playback.
+              </video>
+            </div>
+          ) : previewUrl && fileType === 'audio' ? (
+            <div className="flex items-center justify-center h-96">
+              <audio src={previewUrl} controls className="w-full max-w-md" />
+            </div>
+          ) : previewUrl && fileType === 'text' ? (
+            <div className="w-full h-[calc(90vh-200px)] overflow-auto">
+              <pre className="p-4 bg-muted rounded-lg text-sm font-mono whitespace-pre-wrap">
+                {textContent || 'Loading text content...'}
+              </pre>
             </div>
           ) : (
             <div className="flex items-center justify-center h-96">

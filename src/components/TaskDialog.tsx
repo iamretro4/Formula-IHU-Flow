@@ -13,33 +13,40 @@ type TaskDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   task?: any;
+  projectId?: string; // Pre-select project if provided
   onSuccess: () => void;
 };
 
-export function TaskDialog({ open, onOpenChange, task, onSuccess }: TaskDialogProps) {
+export function TaskDialog({ open, onOpenChange, task, projectId, onSuccess }: TaskDialogProps) {
   const [loading, setLoading] = useState(false);
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
+  const [projects, setProjects] = useState<any[]>([]);
   const [formData, setFormData] = useState({
     title: "",
     description: "",
     status: "pending",
     priority: "medium",
+    difficulty: "medium",
     assigned_to: "",
     due_date: "",
+    project_id: "",
   });
   const { toast } = useToast();
 
   useEffect(() => {
     if (open) {
       fetchTeamMembers();
+      fetchProjects();
       if (task) {
         setFormData({
           title: task.title || "",
           description: task.description || "",
           status: task.status || "pending",
           priority: task.priority || "medium",
+          difficulty: task.difficulty || "medium",
           assigned_to: task.assigned_to || "",
           due_date: task.due_date ? new Date(task.due_date).toISOString().split('T')[0] : "",
+          project_id: task.project_id || "",
         });
       } else {
         setFormData({
@@ -47,12 +54,22 @@ export function TaskDialog({ open, onOpenChange, task, onSuccess }: TaskDialogPr
           description: "",
           status: "pending",
           priority: "medium",
+          difficulty: "medium",
           assigned_to: "",
           due_date: "",
+          project_id: projectId || "",
         });
       }
     }
   }, [open, task]);
+
+  const fetchProjects = async () => {
+    const { data } = await supabase
+      .from("projects")
+      .select("id, name")
+      .order("name");
+    setProjects(data || []);
+  };
 
   const fetchTeamMembers = async () => {
     const { data } = await supabase
@@ -71,13 +88,19 @@ export function TaskDialog({ open, onOpenChange, task, onSuccess }: TaskDialogPr
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("User not authenticated");
 
+      if (!formData.project_id) {
+        throw new Error("Project is required");
+      }
+
       const taskData: Database["public"]["Tables"]["tasks"]["Insert"] = {
         title: formData.title,
         description: formData.description || null,
         status: formData.status as Database["public"]["Enums"]["task_status"],
         priority: formData.priority as Database["public"]["Enums"]["task_priority"],
+        difficulty: formData.difficulty as any,
         due_date: formData.due_date ? new Date(formData.due_date).toISOString() : null,
         assigned_to: formData.assigned_to || null,
+        project_id: formData.project_id,
         created_by: user.id,
       };
 
@@ -172,6 +195,22 @@ export function TaskDialog({ open, onOpenChange, task, onSuccess }: TaskDialogPr
             </div>
           </div>
 
+          <div className="space-y-2">
+            <Label htmlFor="project_id">Project *</Label>
+            <Select value={formData.project_id} onValueChange={(value) => setFormData({ ...formData, project_id: value })} required>
+              <SelectTrigger>
+                <SelectValue placeholder="Select project" />
+              </SelectTrigger>
+              <SelectContent>
+                {projects.map((project) => (
+                  <SelectItem key={project.id} value={project.id}>
+                    {project.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="assigned_to">Assign To</Label>
@@ -197,6 +236,23 @@ export function TaskDialog({ open, onOpenChange, task, onSuccess }: TaskDialogPr
                 value={formData.due_date}
                 onChange={(e) => setFormData({ ...formData, due_date: e.target.value })}
               />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="difficulty">Difficulty</Label>
+              <Select value={formData.difficulty} onValueChange={(value) => setFormData({ ...formData, difficulty: value })}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="easy">Easy</SelectItem>
+                  <SelectItem value="medium">Medium</SelectItem>
+                  <SelectItem value="hard">Hard</SelectItem>
+                  <SelectItem value="expert">Expert</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
 

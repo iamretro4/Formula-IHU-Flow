@@ -11,7 +11,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { LayoutDashboard, CheckSquare, FileText, Users, LogOut, Menu, Target } from "lucide-react";
+import { LayoutDashboard, CheckSquare, FileText, Users, LogOut, Menu, Target, Workflow, DollarSign, MessageSquare, AlertTriangle, GanttChart, Calendar, History } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import formulaIhuLogo from "@/assets/formula-ihu-logo.png";
@@ -68,7 +68,13 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
     { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
     { icon: CheckSquare, label: "Tasks", path: "/tasks" },
     { icon: FileText, label: "Documents", path: "/documents" },
+    { icon: Workflow, label: "Approval Workflows", path: "/approval-workflows" },
     { icon: Target, label: "Projects", path: "/projects" },
+    { icon: GanttChart, label: "Gantt Chart", path: "/gantt-chart" },
+    { icon: Calendar, label: "Calendar", path: "/calendar" },
+    { icon: History, label: "Activity Log", path: "/activity-log" },
+    { icon: DollarSign, label: "Budgets", path: "/budgets" },
+    { icon: MessageSquare, label: "Communications", path: "/communications" },
     { icon: Users, label: "Team", path: "/team" },
   ];
 
@@ -84,15 +90,15 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
         </div>
       </div>
 
-      <nav className="flex-1 p-4 space-y-1">
+      <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
         {navigationItems.map((item) => (
           <Button
             key={item.path}
             variant="ghost"
-            className="w-full justify-start"
+            className="w-full justify-start touch-target text-sm sm:text-base"
             onClick={() => navigate(item.path)}
           >
-            <item.icon className="mr-3 h-4 w-4" />
+            <item.icon className="mr-3 h-4 w-4 sm:h-5 sm:w-5" />
             {item.label}
           </Button>
         ))}
@@ -144,19 +150,19 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
 
       {/* Mobile Header & Sidebar */}
       <div className="md:hidden">
-        <header className="fixed top-0 left-0 right-0 h-16 border-b border-border bg-card z-50 flex items-center justify-between px-4">
+        <header className="fixed top-0 left-0 right-0 h-14 sm:h-16 border-b border-border bg-card z-50 flex items-center justify-between px-4 shadow-sm">
           <img 
             src={formulaIhuLogo} 
             alt="Formula IHU" 
-            className="h-10 object-contain"
+            className="h-8 sm:h-10 object-contain"
           />
           <Sheet>
             <SheetTrigger asChild>
-              <Button variant="ghost" size="icon">
+              <Button variant="ghost" size="icon" className="touch-target">
                 <Menu className="h-5 w-5" />
               </Button>
             </SheetTrigger>
-            <SheetContent side="left" className="w-64 p-0">
+            <SheetContent side="left" className="w-64 sm:w-80 p-0">
               <NavContent />
             </SheetContent>
           </Sheet>
@@ -164,8 +170,8 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
       </div>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-auto md:p-8 p-4 md:pt-8 pt-20">
-        <div className="max-w-7xl mx-auto">
+      <main className="flex-1 overflow-auto md:p-8 p-4 md:pt-8 pt-20 pb-20 md:pb-8">
+        <div className="max-w-7xl mx-auto w-full">
           {children}
         </div>
       </main>
