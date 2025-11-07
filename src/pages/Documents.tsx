@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, FileText, Calendar, CheckCircle, AlertCircle, Clock } from "lucide-react";
+import { Plus, FileText, Calendar, CheckCircle, AlertCircle, Clock, Download, ThumbsUp, ThumbsDown } from "lucide-react";
 import { useUserRole } from "@/hooks/useUserRole";
 import { DocumentDialog } from "@/components/DocumentDialog";
 
@@ -19,6 +19,7 @@ type Document = {
   submission_deadline: string | null;
   submitted_at: string | null;
   is_approved: boolean;
+  file_url: string | null;
   created_at: string;
 };
 
@@ -50,7 +51,7 @@ const Documents = () => {
     return () => subscription.unsubscribe();
   }, [navigate]);
 
-  const { isLeadership } = useUserRole(user?.id);
+  const { isLeadership, isDirector } = useUserRole(user?.id);
 
   useEffect(() => {
     if (user) {
@@ -116,6 +117,72 @@ const Documents = () => {
       }
     }
     return <Badge className="bg-muted text-muted-foreground">Draft</Badge>;
+  };
+
+  const handleApproveDocument = async (docId: string) => {
+    try {
+      const { error } = await supabase
+        .from("documents")
+        .update({ 
+          is_approved: true,
+          approved_by: user?.id,
+        })
+        .eq("id", docId);
+
+      if (error) throw error;
+
+      toast({ title: "Document approved successfully" });
+      fetchDocuments();
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message,
+      });
+    }
+  };
+
+  const handleDownloadDocument = async (doc: Document) => {
+    if (!doc.file_url) {
+      toast({
+        variant: "destructive",
+        title: "No file available",
+        description: "This document doesn't have an attached file",
+      });
+      return;
+    }
+
+    try {
+      // Extract file path from URL
+      const url = new URL(doc.file_url);
+      const pathParts = url.pathname.split('/');
+      const filePath = pathParts.slice(pathParts.indexOf('documents') + 1).join('/');
+
+      const { data, error } = await supabase.storage
+        .from('documents')
+        .download(filePath);
+
+      if (error) throw error;
+
+      // Create download link
+      const blob = new Blob([data]);
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = doc.title;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(downloadUrl);
+
+      toast({ title: "Document downloaded successfully" });
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Download failed",
+        description: error.message,
+      });
+    }
   };
 
   return (
@@ -193,6 +260,27 @@ const Documents = () => {
                       Submitted: {new Date(doc.submitted_at).toLocaleDateString()}
                     </div>
                   )}
+                  <div className="flex gap-2 mt-2">
+                    {doc.file_url && (
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        onClick={() => handleDownloadDocument(doc)}
+                      >
+                        <Download className="h-4 w-4 mr-2" />
+                        Download
+                      </Button>
+                    )}
+                    {isDirector && doc.submitted_at && !doc.is_approved && (
+                      <Button 
+                        size="sm"
+                        onClick={() => handleApproveDocument(doc.id)}
+                      >
+                        <ThumbsUp className="h-4 w-4 mr-2" />
+                        Approve
+                      </Button>
+                    )}
+                  </div>
                 </CardContent>
               </Card>
             ))}

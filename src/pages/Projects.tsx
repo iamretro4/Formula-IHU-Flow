@@ -7,8 +7,10 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Calendar, Target, TrendingUp, CheckCircle2 } from "lucide-react";
+import { Plus, Calendar, Target, TrendingUp, CheckCircle2, Edit } from "lucide-react";
 import { useUserRole } from "@/hooks/useUserRole";
+import { ProjectDialog } from "@/components/ProjectDialog";
+import { MilestoneDialog } from "@/components/MilestoneDialog";
 
 type Project = {
   id: string;
@@ -34,6 +36,11 @@ const Projects = () => {
   const [milestones, setMilestones] = useState<Record<string, Milestone[]>>({});
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
+  const [projectDialogOpen, setProjectDialogOpen] = useState(false);
+  const [milestoneDialogOpen, setMilestoneDialogOpen] = useState(false);
+  const [selectedProject, setSelectedProject] = useState<Project | undefined>(undefined);
+  const [selectedProjectForMilestone, setSelectedProjectForMilestone] = useState<string>("");
+  const [selectedMilestone, setSelectedMilestone] = useState<Milestone | undefined>(undefined);
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -127,6 +134,29 @@ const Projects = () => {
     return diff;
   };
 
+  const toggleMilestoneComplete = async (milestoneId: string, isCompleted: boolean) => {
+    try {
+      const { error } = await supabase
+        .from("milestones")
+        .update({ 
+          is_completed: !isCompleted,
+          completion_date: !isCompleted ? new Date().toISOString().split('T')[0] : null,
+        })
+        .eq("id", milestoneId);
+
+      if (error) throw error;
+
+      toast({ title: `Milestone ${!isCompleted ? 'completed' : 'reopened'}` });
+      fetchProjects();
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message,
+      });
+    }
+  };
+
   return (
     <DashboardLayout>
       <div className="container mx-auto p-6 space-y-6">
@@ -136,12 +166,27 @@ const Projects = () => {
             <p className="text-muted-foreground">Track project progress and timelines</p>
           </div>
           {isLeadership && (
-            <Button>
+            <Button onClick={() => { setSelectedProject(undefined); setProjectDialogOpen(true); }}>
               <Plus className="mr-2 h-4 w-4" />
               New Project
             </Button>
           )}
         </div>
+
+        <ProjectDialog
+          open={projectDialogOpen}
+          onOpenChange={setProjectDialogOpen}
+          project={selectedProject}
+          onSuccess={fetchProjects}
+        />
+
+        <MilestoneDialog
+          open={milestoneDialogOpen}
+          onOpenChange={setMilestoneDialogOpen}
+          projectId={selectedProjectForMilestone}
+          milestone={selectedMilestone}
+          onSuccess={fetchProjects}
+        />
 
         {loading ? (
           <div className="text-center py-12">
@@ -156,7 +201,7 @@ const Projects = () => {
                 Create your first project to get started
               </p>
               {isLeadership && (
-                <Button>
+                <Button onClick={() => { setSelectedProject(undefined); setProjectDialogOpen(true); }}>
                   <Plus className="mr-2 h-4 w-4" />
                   New Project
                 </Button>
@@ -175,7 +220,18 @@ const Projects = () => {
                   <CardHeader>
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
-                        <CardTitle className="text-2xl mb-2">{project.name}</CardTitle>
+                        <div className="flex items-start justify-between mb-2">
+                          <CardTitle className="text-2xl">{project.name}</CardTitle>
+                          {isLeadership && (
+                            <Button 
+                              variant="ghost" 
+                              size="icon"
+                              onClick={() => { setSelectedProject(project); setProjectDialogOpen(true); }}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
                         <CardDescription className="text-base">
                           {project.description || "No description"}
                         </CardDescription>
@@ -232,14 +288,31 @@ const Projects = () => {
                     </div>
 
                     {/* Milestones Timeline */}
-                    {projectMilestones.length > 0 && (
-                      <div className="space-y-3">
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
                         <h4 className="font-semibold text-sm">Milestones</h4>
+                        {isLeadership && (
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            onClick={() => {
+                              setSelectedProjectForMilestone(project.id);
+                              setSelectedMilestone(undefined);
+                              setMilestoneDialogOpen(true);
+                            }}
+                          >
+                            <Plus className="h-3 w-3 mr-1" />
+                            Add
+                          </Button>
+                        )}
+                      </div>
+                      {projectMilestones.length > 0 ? (
                         <div className="space-y-2">
                           {projectMilestones.map((milestone) => (
                             <div
                               key={milestone.id}
-                              className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
+                              className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors cursor-pointer"
+                              onClick={() => toggleMilestoneComplete(milestone.id, milestone.is_completed)}
                             >
                               <div className={`flex-shrink-0 ${milestone.is_completed ? 'text-success' : 'text-muted-foreground'}`}>
                                 <CheckCircle2 className="h-5 w-5" />
@@ -260,8 +333,12 @@ const Projects = () => {
                             </div>
                           ))}
                         </div>
-                      </div>
-                    )}
+                      ) : (
+                        <p className="text-sm text-muted-foreground text-center py-4">
+                          No milestones yet. Click Add to create one.
+                        </p>
+                      )}
+                    </div>
                   </CardContent>
                 </Card>
               );

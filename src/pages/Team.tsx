@@ -7,8 +7,9 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { UserPlus, Mail, Phone, Users as UsersIcon } from "lucide-react";
+import { UserPlus, Mail, Phone, Users as UsersIcon, Edit } from "lucide-react";
 import { useUserRole } from "@/hooks/useUserRole";
+import { TeamMemberDialog } from "@/components/TeamMemberDialog";
 
 type Profile = {
   id: string;
@@ -34,6 +35,8 @@ const Team = () => {
   const [members, setMembers] = useState<UserWithRole[]>([]);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [selectedMember, setSelectedMember] = useState<UserWithRole | undefined>(undefined);
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -133,12 +136,19 @@ const Team = () => {
             <p className="text-muted-foreground">Manage your Formula IHU team</p>
           </div>
           {isTeamLeader && (
-            <Button>
+            <Button onClick={() => { setSelectedMember(undefined); setDialogOpen(true); }}>
               <UserPlus className="mr-2 h-4 w-4" />
               Add Member
             </Button>
           )}
         </div>
+
+        <TeamMemberDialog
+          open={dialogOpen}
+          onOpenChange={setDialogOpen}
+          member={selectedMember}
+          onSuccess={fetchTeamMembers}
+        />
 
         {loading ? (
           <div className="text-center py-12">
@@ -153,7 +163,7 @@ const Team = () => {
                 Add your first team member to get started
               </p>
               {isTeamLeader && (
-                <Button>
+                <Button onClick={() => { setSelectedMember(undefined); setDialogOpen(true); }}>
                   <UserPlus className="mr-2 h-4 w-4" />
                   Add Member
                 </Button>
@@ -173,11 +183,24 @@ const Team = () => {
                       </AvatarFallback>
                     </Avatar>
                     <div className="flex-1">
-                      <CardTitle className="text-lg">{member.full_name}</CardTitle>
-                      <CardDescription className="text-sm">
-                        {member.department || "No department"}
-                        {member.sub_team && ` • ${member.sub_team}`}
-                      </CardDescription>
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <CardTitle className="text-lg">{member.full_name}</CardTitle>
+                          <CardDescription className="text-sm">
+                            {member.department || "No department"}
+                            {member.sub_team && ` • ${member.sub_team}`}
+                          </CardDescription>
+                        </div>
+                        {isTeamLeader && (
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            onClick={() => { setSelectedMember(member); setDialogOpen(true); }}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
                     </div>
                     {getRoleBadge(member)}
                   </div>
