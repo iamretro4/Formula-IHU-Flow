@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import type { Database } from "@/integrations/supabase/types";
 
 type ProjectDialogProps = {
   open: boolean;
@@ -54,6 +55,9 @@ export function ProjectDialog({ open, onOpenChange, project, onSuccess }: Projec
     setLoading(true);
 
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("User not authenticated");
+
       const projectData = {
         name: formData.name,
         description: formData.description || null,
@@ -61,6 +65,7 @@ export function ProjectDialog({ open, onOpenChange, project, onSuccess }: Projec
         start_date: formData.start_date,
         end_date: formData.end_date,
         competition_date: formData.competition_date || null,
+        created_by: user.id,
       };
 
       if (project) {

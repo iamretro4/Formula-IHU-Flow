@@ -68,16 +68,37 @@ export function TeamMemberDialog({ open, onOpenChange, member, onSuccess }: Team
 
         if (profileError) throw profileError;
 
-        // Update role
-        const { error: roleError } = await supabase
+        // Update or insert role (UPSERT)
+        // First, check if role exists
+        const { data: existingRole } = await supabase
           .from("user_roles")
-          .update({
-            role: formData.role as Database["public"]["Enums"]["app_role"],
-            department: formData.department as Database["public"]["Enums"]["department"] || null,
-          })
-          .eq("user_id", member.id);
+          .select("id")
+          .eq("user_id", member.id)
+          .maybeSingle();
 
-        if (roleError) throw roleError;
+        if (existingRole) {
+          // Update existing role
+          const { error: roleError } = await supabase
+            .from("user_roles")
+            .update({
+              role: formData.role as Database["public"]["Enums"]["app_role"],
+              department: formData.department as Database["public"]["Enums"]["department"] || null,
+            })
+            .eq("id", existingRole.id);
+
+          if (roleError) throw roleError;
+        } else {
+          // Insert new role
+          const { error: roleError } = await supabase
+            .from("user_roles")
+            .insert({
+              user_id: member.id,
+              role: formData.role as Database["public"]["Enums"]["app_role"],
+              department: formData.department as Database["public"]["Enums"]["department"] || null,
+            });
+
+          if (roleError) throw roleError;
+        }
 
         toast({ title: "Team member updated successfully" });
       } else {

@@ -8,6 +8,7 @@ import { Progress } from "@/components/ui/progress";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Calendar, Target, TrendingUp, CheckCircle2, Edit } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useUserRole } from "@/hooks/useUserRole";
 import { ProjectDialog } from "@/components/ProjectDialog";
 import { MilestoneDialog } from "@/components/MilestoneDialog";
@@ -189,8 +190,19 @@ const Projects = () => {
         />
 
         {loading ? (
-          <div className="text-center py-12">
-            <p className="text-muted-foreground">Loading projects...</p>
+          <div className="space-y-6">
+            {[1, 2].map((i) => (
+              <Card key={i}>
+                <CardHeader>
+                  <Skeleton className="h-6 w-1/3" />
+                  <Skeleton className="h-4 w-2/3 mt-2" />
+                </CardHeader>
+                <CardContent>
+                  <Skeleton className="h-4 w-full mb-4" />
+                  <Skeleton className="h-2 w-full" />
+                </CardContent>
+              </Card>
+            ))}
           </div>
         ) : projects.length === 0 ? (
           <Card>

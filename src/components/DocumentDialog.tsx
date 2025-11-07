@@ -41,7 +41,45 @@ export function DocumentDialog({ open, onOpenChange, onSuccess }: DocumentDialog
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      setFile(e.target.files[0]);
+      const selectedFile = e.target.files[0];
+      
+      // Validate file size (50MB limit)
+      const maxSize = 50 * 1024 * 1024; // 50MB in bytes
+      if (selectedFile.size > maxSize) {
+        toast({
+          variant: "destructive",
+          title: "File too large",
+          description: `File size must be less than 50MB. Current size: ${(selectedFile.size / 1024 / 1024).toFixed(2)}MB`,
+        });
+        e.target.value = ""; // Reset input
+        return;
+      }
+
+      // Validate file type
+      const allowedTypes = [
+        'application/pdf',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.ms-excel',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'application/vnd.ms-powerpoint',
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        'image/jpeg',
+        'image/png',
+        'text/plain'
+      ];
+      
+      if (!allowedTypes.includes(selectedFile.type)) {
+        toast({
+          variant: "destructive",
+          title: "Invalid file type",
+          description: "Please upload PDF, Word, Excel, PowerPoint, Image, or Text files only.",
+        });
+        e.target.value = ""; // Reset input
+        return;
+      }
+
+      setFile(selectedFile);
     }
   };
 

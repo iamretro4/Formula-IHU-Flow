@@ -68,6 +68,9 @@ export function TaskDialog({ open, onOpenChange, task, onSuccess }: TaskDialogPr
     setLoading(true);
 
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("User not authenticated");
+
       const taskData: Database["public"]["Tables"]["tasks"]["Insert"] = {
         title: formData.title,
         description: formData.description || null,
@@ -75,6 +78,7 @@ export function TaskDialog({ open, onOpenChange, task, onSuccess }: TaskDialogPr
         priority: formData.priority as Database["public"]["Enums"]["task_priority"],
         due_date: formData.due_date ? new Date(formData.due_date).toISOString() : null,
         assigned_to: formData.assigned_to || null,
+        created_by: user.id,
       };
 
       if (task) {

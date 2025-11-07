@@ -4,11 +4,15 @@ import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, FileText, Calendar, CheckCircle, AlertCircle, Clock, Download, ThumbsUp, ThumbsDown } from "lucide-react";
+import { Plus, FileText, Calendar, CheckCircle, AlertCircle, Clock, Download, ThumbsUp, ThumbsDown, Search, Eye } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useUserRole } from "@/hooks/useUserRole";
 import { DocumentDialog } from "@/components/DocumentDialog";
+import { FilePreviewDialog } from "@/components/FilePreviewDialog";
 
 type Document = {
   id: string;
@@ -25,9 +29,15 @@ type Document = {
 
 const Documents = () => {
   const [documents, setDocuments] = useState<Document[]>([]);
+  const [filteredDocuments, setFilteredDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [typeFilter, setTypeFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewFile, setPreviewFile] = useState<{ url: string | null; name: string } | null>(null);
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -59,6 +69,37 @@ const Documents = () => {
     }
   }, [user]);
 
+  useEffect(() => {
+    let filtered = documents;
+
+    // Search filter
+    if (searchQuery) {
+      filtered = filtered.filter(
+        (doc) =>
+          doc.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (doc.description && doc.description.toLowerCase().includes(searchQuery.toLowerCase()))
+      );
+    }
+
+    // Type filter
+    if (typeFilter !== "all") {
+      filtered = filtered.filter((doc) => doc.document_type === typeFilter);
+    }
+
+    // Status filter
+    if (statusFilter !== "all") {
+      if (statusFilter === "approved") {
+        filtered = filtered.filter((doc) => doc.is_approved);
+      } else if (statusFilter === "pending") {
+        filtered = filtered.filter((doc) => doc.submitted_at && !doc.is_approved);
+      } else if (statusFilter === "draft") {
+        filtered = filtered.filter((doc) => !doc.submitted_at);
+      }
+    }
+
+    setFilteredDocuments(filtered);
+  }, [documents, searchQuery, typeFilter, statusFilter]);
+
   const fetchDocuments = async () => {
     try {
       const { data, error } = await supabase
@@ -67,7 +108,9 @@ const Documents = () => {
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-      setDocuments(data || []);
+      const docs = data || [];
+      setDocuments(docs);
+      setFilteredDocuments(docs);
     } catch (error: any) {
       toast({
         variant: "destructive",
@@ -199,15 +242,74 @@ const Documents = () => {
           </Button>
         </div>
 
+        {/* Search and Filters */}
+        <div className="flex flex-col md:flex-row gap-4">
+          <div className="flex-1 relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search documents by title or description..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+          <Select value={typeFilter} onValueChange={setTypeFilter}>
+            <SelectTrigger className="w-full md:w-[200px]">
+              <SelectValue placeholder="Filter by type" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Types</SelectItem>
+              <SelectItem value="design_spec">Design Specification</SelectItem>
+              <SelectItem value="engineering_report">Engineering Report</SelectItem>
+              <SelectItem value="cost_report">Cost Report</SelectItem>
+              <SelectItem value="status_video">Status Video</SelectItem>
+              <SelectItem value="business_plan">Business Plan</SelectItem>
+              <SelectItem value="safety_doc">Safety Document</SelectItem>
+              <SelectItem value="other">Other</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-full md:w-[180px]">
+              <SelectValue placeholder="Filter by status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Statuses</SelectItem>
+              <SelectItem value="draft">Draft</SelectItem>
+              <SelectItem value="pending">Pending Approval</SelectItem>
+              <SelectItem value="approved">Approved</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
         <DocumentDialog
           open={dialogOpen}
           onOpenChange={setDialogOpen}
           onSuccess={fetchDocuments}
         />
 
+        {previewFile && (
+          <FilePreviewDialog
+            open={previewOpen}
+            onOpenChange={setPreviewOpen}
+            fileUrl={previewFile.url}
+            fileName={previewFile.name}
+          />
+        )}
+
         {loading ? (
-          <div className="text-center py-12">
-            <p className="text-muted-foreground">Loading documents...</p>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {[1, 2, 3].map((i) => (
+              <Card key={i}>
+                <CardHeader>
+                  <Skeleton className="h-5 w-3/4" />
+                  <Skeleton className="h-4 w-1/2 mt-2" />
+                </CardHeader>
+                <CardContent>
+                  <Skeleton className="h-4 w-full mb-2" />
+                  <Skeleton className="h-4 w-5/6" />
+                </CardContent>
+              </Card>
+            ))}
           </div>
         ) : documents.length === 0 ? (
           <Card>
@@ -223,9 +325,21 @@ const Documents = () => {
               </Button>
             </CardContent>
           </Card>
+        ) : filteredDocuments.length === 0 ? (
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-12">
+              <FileText className="h-12 w-12 text-muted-foreground mb-4" />
+              <p className="text-lg font-medium mb-2">No documents found</p>
+              <p className="text-sm text-muted-foreground">
+                {searchQuery || typeFilter !== "all" || statusFilter !== "all"
+                  ? "Try adjusting your filters"
+                  : "Upload your first compliance document to get started"}
+              </p>
+            </CardContent>
+          </Card>
         ) : (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {documents.map((doc) => (
+            {filteredDocuments.map((doc) => (
               <Card key={doc.id}>
                 <CardHeader>
                   <div className="flex items-start justify-between">
@@ -262,14 +376,27 @@ const Documents = () => {
                   )}
                   <div className="flex gap-2 mt-2">
                     {doc.file_url && (
-                      <Button 
-                        size="sm" 
-                        variant="outline"
-                        onClick={() => handleDownloadDocument(doc)}
-                      >
-                        <Download className="h-4 w-4 mr-2" />
-                        Download
-                      </Button>
+                      <>
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={() => {
+                            setPreviewFile({ url: doc.file_url, name: doc.title });
+                            setPreviewOpen(true);
+                          }}
+                        >
+                          <Eye className="h-4 w-4 mr-2" />
+                          Preview
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={() => handleDownloadDocument(doc)}
+                        >
+                          <Download className="h-4 w-4 mr-2" />
+                          Download
+                        </Button>
+                      </>
                     )}
                     {isDirector && doc.submitted_at && !doc.is_approved && (
                       <Button 
