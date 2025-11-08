@@ -17,23 +17,11 @@ serve(async (req) => {
   }
 
   try {
-    const supabaseClient = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_ANON_KEY") ?? "",
-      {
-        global: {
-          headers: { Authorization: req.headers.get("Authorization")! },
-        },
-      }
-    );
-
-    const {
-      data: { user },
-    } = await supabaseClient.auth.getUser();
-
-    if (!user) {
+    // Get authorization header
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
       return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
+        JSON.stringify({ error: "Missing authorization header" }),
         {
           status: 401,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -41,36 +29,49 @@ serve(async (req) => {
       );
     }
 
-    const { action, code, state } = await req.json();
+    const supabaseClient = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+      {
+        global: {
+          headers: { Authorization: authHeader },
+        },
+      }
+    );
 
-    if (action === "initiate") {
-      // Generate OAuth URL
-      const clientId = Deno.env.get("GOOGLE_CLIENT_ID");
-      const redirectUri = `${Deno.env.get("SUPABASE_URL")}/functions/v1/google-calendar-oauth`;
-      const scope = "https://www.googleapis.com/auth/calendar";
-      const stateParam = crypto.randomUUID();
+    const {
+      data: { user },
+      error: userError,
+    } = await supabaseClient.auth.getUser();
 
-      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scope)}&access_type=offline&prompt=consent&state=${stateParam}`;
-
-      // Store state in database
-      await supabaseClient
-        .from("calendar_connections")
-        .insert({
-          user_id: user.id,
-          provider: "google",
-          state: stateParam,
-          is_active: false,
-        });
-
+    if (userError || !user) {
       return new Response(
-        JSON.stringify({ authUrl, state: stateParam }),
+        JSON.stringify({ error: "Unauthorized", details: userError?.message }),
         {
+          status: 401,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         }
       );
     }
 
-    if (action === "callback" && code) {
+    // Handle OAuth callback (GET request with query params)
+    const url = new URL(req.url);
+    const code = url.searchParams.get("code");
+    const state = url.searchParams.get("state");
+    const error = url.searchParams.get("error");
+
+    if (error) {
+      return new Response(
+        JSON.stringify({ error: `OAuth error: ${error}` }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    // Handle callback from Google OAuth
+    if (code && state) {
       // Exchange code for tokens
       const clientId = Deno.env.get("GOOGLE_CLIENT_ID");
       const clientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET");
@@ -96,23 +97,101 @@ serve(async (req) => {
         throw new Error(tokens.error_description || tokens.error);
       }
 
+      // Get calendar info
+      const calendarResponse = await fetch(
+        "https://www.googleapis.com/calendar/v3/users/me/calendarList/primary",
+        {
+          headers: {
+            Authorization: `Bearer ${tokens.access_token}`,
+          },
+        }
+      );
+      const calendarData = await calendarResponse.json();
+
       // Store tokens in database
-      await supabaseClient
+      const { error: dbError } = await supabaseClient
         .from("calendar_connections")
-        .update({
+        .upsert({
+          user_id: user.id,
+          provider: "google",
           access_token: tokens.access_token,
           refresh_token: tokens.refresh_token,
           token_expires_at: new Date(
             Date.now() + tokens.expires_in * 1000
           ).toISOString(),
+          calendar_id: calendarData.id || "primary",
+          calendar_name: calendarData.summary || "Primary Calendar",
           is_active: true,
-        })
-        .eq("user_id", user.id)
-        .eq("provider", "google")
-        .eq("state", state);
+          last_sync_at: new Date().toISOString(),
+        }, {
+          onConflict: "user_id,provider",
+        });
+
+      if (dbError) {
+        throw new Error(`Database error: ${dbError.message}`);
+      }
+
+      // Redirect to success page
+      return new Response(null, {
+        status: 302,
+        headers: {
+          Location: `${Deno.env.get("SUPABASE_URL")?.replace("/rest/v1", "")}/calendar?connected=true`,
+        },
+      });
+    }
+
+    // Handle initiate action (POST request)
+    let requestBody;
+    try {
+      requestBody = await req.json();
+    } catch (e) {
+      return new Response(
+        JSON.stringify({ error: "Invalid request body", details: e.message }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    const { action } = requestBody || {};
+
+    if (action === "initiate") {
+      // Generate OAuth URL
+      const clientId = Deno.env.get("GOOGLE_CLIENT_ID");
+      
+      if (!clientId) {
+        return new Response(
+          JSON.stringify({ 
+            error: "GOOGLE_CLIENT_ID not configured",
+            details: "Please set GOOGLE_CLIENT_ID in Supabase Edge Function environment variables"
+          }),
+          {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+
+      const supabaseUrl = Deno.env.get("SUPABASE_URL");
+      if (!supabaseUrl) {
+        return new Response(
+          JSON.stringify({ error: "SUPABASE_URL not configured" }),
+          {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+
+      const redirectUri = `${supabaseUrl}/functions/v1/google-calendar-oauth`;
+      const scope = "https://www.googleapis.com/auth/calendar";
+      const stateParam = crypto.randomUUID();
+
+      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scope)}&access_type=offline&prompt=consent&state=${stateParam}`;
 
       return new Response(
-        JSON.stringify({ success: true }),
+        JSON.stringify({ authUrl, state: stateParam }),
         {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         }
@@ -120,7 +199,7 @@ serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ error: "Invalid action" }),
+      JSON.stringify({ error: "Invalid action", received: action }),
       {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },

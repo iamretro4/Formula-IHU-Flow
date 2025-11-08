@@ -1,14 +1,28 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Calendar, ChevronLeft, ChevronRight, Clock, Target, FileText, Users } from "lucide-react";
+import { Calendar, ChevronLeft, ChevronRight, Clock, Target, FileText, Users, Settings } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isSameMonth, addMonths, subMonths } from "date-fns";
+import { CalendarSyncSettings } from "@/components/CalendarSyncSettings";
+import { useCalendarConnection } from "@/hooks/useCalendarConnection";
+import { useSyncCalendarToGoogle, convertEventsToSyncFormat } from "@/hooks/useCalendarSync";
+import { useTasks } from "@/hooks/useTasks";
+import { useProjects } from "@/hooks/useProjects";
+import { useDocuments } from "@/hooks/useDocuments";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 
 type CalendarEvent = {
   id: string;
@@ -26,69 +40,28 @@ const CalendarView = () => {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [syncSettingsOpen, setSyncSettingsOpen] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const { data: connection } = useCalendarConnection();
+  const syncToGoogleMutation = useSyncCalendarToGoogle();
+  const { data: tasks } = useTasks();
+  const { data: projects } = useProjects();
+  const { data: documents } = useDocuments();
 
-  const handleSyncGoogleCalendar = async () => {
-    try {
-      if (!user) {
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Please log in to sync with Google Calendar",
-        });
-        return;
-      }
-
-      // Check if user has connected Google Calendar
-      const { data: connections } = await supabase
-        .from("calendar_connections")
-        .select("*")
-        .eq("user_id", user.id)
-        .eq("provider", "google")
-        .eq("is_active", true)
-        .maybeSingle();
-
-      if (!connections) {
-        // Initiate OAuth flow
-        const { data, error } = await supabase.functions.invoke("google-calendar-oauth", {
-          body: { action: "initiate" },
-        });
-
-        if (error) throw error;
-
-        if (data?.authUrl) {
-          // Redirect to Google OAuth
-          window.location.href = data.authUrl;
-        } else {
-          toast({
-            variant: "destructive",
-            title: "Error",
-            description: "Failed to initiate Google Calendar connection. Please ensure GOOGLE_CLIENT_ID is configured.",
-          });
-        }
-      } else {
-        // Sync existing connection
-        toast({
-          title: "Syncing with Google Calendar...",
-        });
-        
-        // Call sync function (would sync events)
-        // For now, just show success
-        toast({
-          title: "Sync Complete",
-          description: "Your calendar has been synced with Google Calendar",
-        });
-      }
-    } catch (error: any) {
-      console.error("Error syncing Google Calendar:", error);
+  // Handle OAuth callback
+  useEffect(() => {
+    const connected = searchParams.get("connected");
+    if (connected === "true") {
       toast({
-        variant: "destructive",
-        title: "Error",
-        description: error.message || "Failed to sync with Google Calendar",
+        title: "Google Calendar Connected",
+        description: "Your Google Calendar has been successfully connected!",
       });
+      // Remove query param
+      navigate("/calendar", { replace: true });
     }
-  };
+  }, [searchParams, toast, navigate]);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -248,6 +221,42 @@ const CalendarView = () => {
   const previousMonth = () => setCurrentDate(subMonths(currentDate, 1));
   const nextMonth = () => setCurrentDate(addMonths(currentDate, 1));
 
+  const handleSyncToGoogle = async () => {
+    if (!connection) {
+      toast({
+        variant: "destructive",
+        title: "Not Connected",
+        description: "Please connect your Google Calendar first",
+      });
+      setSyncSettingsOpen(true);
+      return;
+    }
+
+    if (!tasks || !projects || !documents) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Unable to fetch events. Please try again.",
+      });
+      return;
+    }
+
+    // Get milestones from projects
+    const allMilestones: any[] = [];
+    for (const project of projects) {
+      const { data: milestones } = await supabase
+        .from("milestones")
+        .select("*")
+        .eq("project_id", project.id);
+      if (milestones) {
+        allMilestones.push(...milestones);
+      }
+    }
+
+    const syncEvents = convertEventsToSyncFormat(tasks, allMilestones, documents);
+    syncToGoogleMutation.mutate(syncEvents);
+  };
+
   if (loading) {
     return (
       <DashboardLayout>
@@ -269,10 +278,35 @@ const CalendarView = () => {
               View all tasks, milestones, meetings, and deadlines
             </p>
           </div>
-          <Button onClick={handleSyncGoogleCalendar} variant="outline">
-            <Calendar className="mr-2 h-4 w-4" />
-            Sync with Google Calendar
-          </Button>
+          <div className="flex gap-2">
+            {connection && (
+              <Button
+                onClick={handleSyncToGoogle}
+                variant="outline"
+                disabled={syncToGoogleMutation.isPending}
+              >
+                <Calendar className="mr-2 h-4 w-4" />
+                {syncToGoogleMutation.isPending ? "Syncing..." : "Sync to Google"}
+              </Button>
+            )}
+            <Dialog open={syncSettingsOpen} onOpenChange={setSyncSettingsOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline">
+                  <Settings className="mr-2 h-4 w-4" />
+                  Calendar Settings
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl">
+                <DialogHeader>
+                  <DialogTitle>Google Calendar Sync Settings</DialogTitle>
+                  <DialogDescription>
+                    Manage your Google Calendar connection and sync preferences
+                  </DialogDescription>
+                </DialogHeader>
+                <CalendarSyncSettings />
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
 
         <Card>
