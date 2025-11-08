@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Calendar, Target, TrendingUp, CheckCircle2, Edit, Trash2 } from "lucide-react";
+import { Plus, Calendar, Target, TrendingUp, CheckCircle2, Edit, Trash2, Download } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ProjectDialog } from "@/components/ProjectDialog";
 import { MilestoneDialog } from "@/components/MilestoneDialog";
@@ -17,10 +17,8 @@ import { useDeleteProject } from "@/hooks/useProjects";
 import { usePagination } from "@/hooks/usePagination";
 import { PaginationControls } from "@/components/PaginationControls";
 import { exportToCSV } from "@/utils/export";
-import { Download } from "lucide-react";
 import { BulkOperations } from "@/components/BulkOperations";
 import { Checkbox } from "@/components/ui/checkbox";
-import { DeleteConfirmationDialog } from "@/components/DeleteConfirmationDialog";
 import { format } from "date-fns";
 
 type Project = {

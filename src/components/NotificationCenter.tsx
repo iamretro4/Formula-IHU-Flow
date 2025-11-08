@@ -51,13 +51,21 @@ export const NotificationCenter = () => {
         .order("created_at", { ascending: false })
         .limit(50);
 
-      if (error) throw error;
+      if (error) {
+        // Silently fail if table doesn't exist yet
+        if (error.code === "42P01" || error.message.includes("does not exist")) {
+          console.warn("Notifications table not found, skipping notifications");
+          return;
+        }
+        throw error;
+      }
 
       const notifs = (data || []) as Notification[];
       setNotifications(notifs);
       setUnreadCount(notifs.filter((n) => !n.is_read).length);
     } catch (error) {
       console.error("Error fetching notifications:", error);
+      // Don't break the app if notifications fail
     }
   };
 
@@ -68,14 +76,23 @@ export const NotificationCenter = () => {
         .update({ is_read: true })
         .eq("id", id);
 
-      if (error) throw error;
+      if (error) {
+        if (error.code === "42P01" || error.message.includes("does not exist")) {
+          return; // Silently fail if table doesn't exist
+        }
+        throw error;
+      }
       fetchNotifications();
     } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: error.message,
-      });
+      console.error("Error marking notification as read:", error);
+      // Don't show toast for missing table
+      if (error.code !== "42P01" && !error.message?.includes("does not exist")) {
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: error.message,
+        });
+      }
     }
   };
 
@@ -90,14 +107,23 @@ export const NotificationCenter = () => {
         .eq("user_id", user.id)
         .eq("is_read", false);
 
-      if (error) throw error;
+      if (error) {
+        if (error.code === "42P01" || error.message.includes("does not exist")) {
+          return; // Silently fail if table doesn't exist
+        }
+        throw error;
+      }
       fetchNotifications();
     } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: error.message,
-      });
+      console.error("Error marking all as read:", error);
+      // Don't show toast for missing table
+      if (error.code !== "42P01" && !error.message?.includes("does not exist")) {
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: error.message,
+        });
+      }
     }
   };
 
@@ -108,14 +134,23 @@ export const NotificationCenter = () => {
         .delete()
         .eq("id", id);
 
-      if (error) throw error;
+      if (error) {
+        if (error.code === "42P01" || error.message.includes("does not exist")) {
+          return; // Silently fail if table doesn't exist
+        }
+        throw error;
+      }
       fetchNotifications();
     } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: error.message,
-      });
+      console.error("Error deleting notification:", error);
+      // Don't show toast for missing table
+      if (error.code !== "42P01" && !error.message?.includes("does not exist")) {
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: error.message,
+        });
+      }
     }
   };
 

@@ -34,9 +34,14 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner />
-      <GlobalSearch />
       <ErrorBoundary>
-        <BrowserRouter>
+        <BrowserRouter
+          future={{
+            v7_startTransition: true,
+            v7_relativeSplatPath: true,
+          }}
+        >
+          <GlobalSearch />
           <Routes>
             <Route path="/" element={<Auth />} />
             <Route path="/dashboard" element={<Dashboard />} />

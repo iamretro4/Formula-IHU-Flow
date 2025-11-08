@@ -7,12 +7,19 @@ export const ThemeToggle = () => {
 
   useEffect(() => {
     // Check localStorage and system preference
-    const savedTheme = localStorage.getItem("theme") as "light" | "dark" | null;
-    const systemTheme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-    const initialTheme = savedTheme || systemTheme;
-    
-    setTheme(initialTheme);
-    updateTheme(initialTheme);
+    try {
+      const savedTheme = localStorage.getItem("theme") as "light" | "dark" | null;
+      const systemTheme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      const initialTheme = savedTheme || systemTheme;
+      
+      setTheme(initialTheme);
+      updateTheme(initialTheme);
+    } catch (error) {
+      console.error("Error loading theme:", error);
+      // Default to light theme if there's an error
+      setTheme("light");
+      updateTheme("light");
+    }
   }, []);
 
   const updateTheme = (newTheme: "light" | "dark") => {
