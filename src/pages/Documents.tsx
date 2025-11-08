@@ -8,10 +8,20 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, FileText, Calendar, CheckCircle, AlertCircle, Clock, Download, ThumbsUp, ThumbsDown, Search, Eye, History, AlertTriangle, Euro } from "lucide-react";
+import { Plus, FileText, Calendar, CheckCircle, AlertCircle, Clock, Download, ThumbsUp, ThumbsDown, Search, Eye, History, AlertTriangle, Euro, Trash2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DocumentDialog } from "@/components/DocumentDialog";
 import { FilePreviewDialog } from "@/components/FilePreviewDialog";
+import { DeleteConfirmationDialog } from "@/components/DeleteConfirmationDialog";
+import { useDeleteDocument } from "@/hooks/useDocuments";
+import { usePagination } from "@/hooks/usePagination";
+import { PaginationControls } from "@/components/PaginationControls";
+import { exportToCSV } from "@/utils/export";
+import { BulkOperations } from "@/components/BulkOperations";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useDebounce } from "@/hooks/useDebounce";
+import { highlightSearchTerm } from "@/utils/searchHighlight";
+import { formatDistanceToNow, format } from "date-fns";
 
 type Document = {
   id: string;
@@ -45,8 +55,23 @@ const Documents = () => {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewFile, setPreviewFile] = useState<{ url: string | null; name: string } | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [documentToDelete, setDocumentToDelete] = useState<Document | null>(null);
+  const [selectedDocuments, setSelectedDocuments] = useState<string[]>([]);
+  const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
+  const [itemsPerPage, setItemsPerPage] = useState(20);
   const { toast } = useToast();
   const navigate = useNavigate();
+  const deleteDocument = useDeleteDocument();
+  
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
+  
+  const {
+    paginatedData: paginatedDocuments,
+    currentPage,
+    totalPages,
+    goToPage,
+  } = usePagination(filteredDocuments, itemsPerPage);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -79,12 +104,12 @@ const Documents = () => {
   useEffect(() => {
     let filtered = documents;
 
-    // Search filter
-    if (searchQuery) {
+    // Search filter (using debounced query)
+    if (debouncedSearchQuery) {
       filtered = filtered.filter(
         (doc) =>
-          doc.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          (doc.description && doc.description.toLowerCase().includes(searchQuery.toLowerCase()))
+          doc.title.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+          (doc.description && doc.description.toLowerCase().includes(debouncedSearchQuery.toLowerCase()))
       );
     }
 
@@ -105,7 +130,7 @@ const Documents = () => {
     }
 
     setFilteredDocuments(filtered);
-  }, [documents, searchQuery, typeFilter, statusFilter]);
+  }, [documents, debouncedSearchQuery, typeFilter, statusFilter]);
 
   const fetchDocuments = async () => {
     try {
@@ -235,6 +260,89 @@ const Documents = () => {
     }
   };
 
+  const handleDeleteClick = (doc: Document, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setDocumentToDelete(doc);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (documentToDelete) {
+      await deleteDocument.mutateAsync(documentToDelete.id);
+      setDeleteDialogOpen(false);
+      setDocumentToDelete(null);
+      fetchDocuments();
+    }
+  };
+
+  const handleExport = () => {
+    const csvData = filteredDocuments.map((doc) => ({
+      Title: doc.title,
+      Description: doc.description || "",
+      Type: getDocumentTypeLabel(doc.document_type),
+      Version: doc.version,
+      Status: doc.is_approved ? "Approved" : doc.submitted_at ? "Pending" : "Draft",
+      "Submission Deadline": doc.submission_deadline ? format(new Date(doc.submission_deadline), "PP") : "",
+      "Submitted At": doc.submitted_at ? format(new Date(doc.submitted_at), "PP") : "",
+      "Created At": format(new Date(doc.created_at), "PP"),
+    }));
+
+    exportToCSV(csvData, `documents-${new Date().toISOString().split("T")[0]}`, [
+      "Title",
+      "Description",
+      "Type",
+      "Version",
+      "Status",
+      "Submission Deadline",
+      "Submitted At",
+      "Created At",
+    ]);
+  };
+
+  const handleBulkAction = async (action: string, documentIds: string[]) => {
+    try {
+      if (action === "approve") {
+        const { error } = await supabase
+          .from("documents")
+          .update({ is_approved: true })
+          .in("id", documentIds);
+        if (error) throw error;
+        toast({ title: `${documentIds.length} document(s) approved` });
+      } else if (action === "delete") {
+        setBulkDeleteDialogOpen(true);
+        return; // Will be handled by confirmation dialog
+      } else if (action === "reject") {
+        const { error } = await supabase
+          .from("documents")
+          .update({ is_approved: false, submitted_at: null })
+          .in("id", documentIds);
+        if (error) throw error;
+        toast({ title: `${documentIds.length} document(s) rejected` });
+      }
+      fetchDocuments();
+      setSelectedDocuments([]);
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message,
+      });
+    }
+  };
+
+  const handleBulkDeleteConfirm = async () => {
+    try {
+      for (const id of selectedDocuments) {
+        await deleteDocument.mutateAsync(id);
+      }
+      setBulkDeleteDialogOpen(false);
+      setSelectedDocuments([]);
+      fetchDocuments();
+    } catch (error) {
+      // Error already handled by deleteDocument mutation
+    }
+  };
+
   return (
     <DashboardLayout>
       <div className="container mx-auto p-4 sm:p-6 space-y-4 sm:space-y-6">
@@ -251,6 +359,21 @@ const Documents = () => {
             Upload Document
           </Button>
         </div>
+
+        {/* Bulk Operations */}
+        {filteredDocuments.length > 0 && (
+          <BulkOperations
+            items={filteredDocuments}
+            selectedItems={selectedDocuments}
+            onSelectionChange={setSelectedDocuments}
+            onBulkAction={handleBulkAction}
+            availableActions={[
+              { label: "Approve", value: "approve" },
+              { label: "Reject", value: "reject" },
+              { label: "Delete", value: "delete", variant: "destructive" },
+            ]}
+          />
+        )}
 
         {/* Search and Filters */}
         <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
@@ -303,12 +426,22 @@ const Documents = () => {
 
         {previewFile && (
           <FilePreviewDialog
-            open={previewOpen}
-            onOpenChange={setPreviewOpen}
-            fileUrl={previewFile.url}
-            fileName={previewFile.name}
-          />
+          open={previewOpen}
+          onOpenChange={setPreviewOpen}
+          fileUrl={previewFile.url}
+          fileName={previewFile.name}
+        />
         )}
+
+        <DeleteConfirmationDialog
+          open={deleteDialogOpen}
+          onOpenChange={setDeleteDialogOpen}
+          onConfirm={handleConfirmDelete}
+          title="Delete Document"
+          description="Are you sure you want to delete this document? The file will also be removed from storage."
+          itemName={documentToDelete?.title}
+          isLoading={deleteDocument.isPending}
+        />
 
         {loading ? (
           <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
@@ -352,15 +485,34 @@ const Documents = () => {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-            {filteredDocuments.map((doc) => (
-              <Card key={doc.id} className="hover:shadow-md transition-shadow">
+          <>
+            <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+              {paginatedDocuments.map((doc) => (
+                <Card 
+                  key={doc.id} 
+                  className={`hover:shadow-md transition-shadow ${
+                    selectedDocuments.includes(doc.id) ? "ring-2 ring-primary" : ""
+                  }`}
+                >
                 <CardHeader className="p-4">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-start gap-2 sm:gap-3 min-w-0 flex-1">
+                      <Checkbox
+                        checked={selectedDocuments.includes(doc.id)}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setSelectedDocuments([...selectedDocuments, doc.id]);
+                          } else {
+                            setSelectedDocuments(selectedDocuments.filter((id) => id !== doc.id));
+                          }
+                        }}
+                        className="mt-1"
+                      />
                       {getStatusIcon(doc)}
                       <div className="flex-1 min-w-0">
-                        <CardTitle className="text-base sm:text-lg truncate">{doc.title}</CardTitle>
+                        <CardTitle className="text-base sm:text-lg line-clamp-2">
+                          {debouncedSearchQuery ? highlightSearchTerm(doc.title, debouncedSearchQuery) : doc.title}
+                        </CardTitle>
                         <CardDescription className="text-xs mt-1">
                           {getDocumentTypeLabel(doc.document_type)} v{doc.version}
                         </CardDescription>
@@ -383,7 +535,7 @@ const Documents = () => {
                           ? "text-red-500 font-medium"
                           : "text-muted-foreground"
                       }`}>
-                        Due: {new Date(doc.submission_deadline).toLocaleDateString()}
+                        Due: {format(new Date(doc.submission_deadline), "PP")}
                         {doc.submission_deadline && new Date(doc.submission_deadline) < new Date() && !doc.submitted_at && (
                           <span className="ml-2">⚠️ Overdue</span>
                         )}
@@ -392,7 +544,7 @@ const Documents = () => {
                   )}
                   {doc.submitted_at && (
                     <div className="text-xs text-muted-foreground">
-                      Submitted: {new Date(doc.submitted_at).toLocaleDateString()}
+                      Submitted: {format(new Date(doc.submitted_at), "PP")}
                     </div>
                   )}
                   {doc.penalty_amount && doc.penalty_amount > 0 && (
@@ -467,6 +619,16 @@ const Documents = () => {
                           <span className="hidden sm:inline">Download</span>
                           <span className="sm:hidden">DL</span>
                         </Button>
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          className="touch-target text-xs sm:text-sm text-destructive hover:text-destructive hover:bg-destructive/10"
+                          onClick={(e) => handleDeleteClick(doc, e)}
+                        >
+                          <Trash2 className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                          <span className="hidden sm:inline">Delete</span>
+                          <span className="sm:hidden">Del</span>
+                        </Button>
                       </>
                     )}
                     {doc.submitted_at && !doc.is_approved && (
@@ -484,9 +646,19 @@ const Documents = () => {
                     )}
                   </div>
                 </CardContent>
-              </Card>
-            ))}
-          </div>
+                </Card>
+              ))}
+            </div>
+            
+            <PaginationControls
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={goToPage}
+              itemsPerPage={itemsPerPage}
+              onItemsPerPageChange={setItemsPerPage}
+              totalItems={filteredDocuments.length}
+            />
+          </>
         )}
       </div>
     </DashboardLayout>

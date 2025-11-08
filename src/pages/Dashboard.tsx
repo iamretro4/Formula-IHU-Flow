@@ -4,8 +4,11 @@ import DashboardLayout from "@/components/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
 import { CheckSquare, FileText, Users, AlertCircle, Clock, CheckCircle2, TrendingUp, Calendar as CalendarIcon } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
+import { useQuery } from "@tanstack/react-query";
+import { Task, ChartData } from "@/types";
 
 const Dashboard = () => {
   const [stats, setStats] = useState({
@@ -14,40 +17,76 @@ const Dashboard = () => {
     pendingDocs: 0,
     teamMembers: 0,
   });
-  const [recentTasks, setRecentTasks] = useState<any[]>([]);
-  const [tasksByStatus, setTasksByStatus] = useState<any[]>([]);
-  const [tasksByPriority, setTasksByPriority] = useState<any[]>([]);
+  const [recentTasks, setRecentTasks] = useState<Task[]>([]);
+  const [tasksByStatus, setTasksByStatus] = useState<ChartData[]>([]);
+  const [tasksByPriority, setTasksByPriority] = useState<ChartData[]>([]);
 
+  // Fetch tasks data
+  const { data: tasks, isLoading: tasksLoading } = useQuery({
+    queryKey: ["dashboard-tasks"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("tasks")
+        .select("status, priority");
+      if (error) throw error;
+      return data || [];
+    },
+    staleTime: 30000,
+  });
+
+  // Fetch documents data
+  const { data: documents, isLoading: docsLoading } = useQuery({
+    queryKey: ["dashboard-documents"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("documents")
+        .select("is_approved");
+      if (error) throw error;
+      return data || [];
+    },
+    staleTime: 30000,
+  });
+
+  // Fetch members data
+  const { data: members, isLoading: membersLoading } = useQuery({
+    queryKey: ["dashboard-members"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("is_active", true);
+      if (error) throw error;
+      return data || [];
+    },
+    staleTime: 30000,
+  });
+
+  // Fetch recent tasks
+  const { data: recentTasksData, isLoading: recentLoading } = useQuery({
+    queryKey: ["dashboard-recent-tasks"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("tasks")
+        .select("*, profiles!tasks_assigned_to_fkey(full_name)")
+        .order("created_at", { ascending: false })
+        .limit(5);
+      if (error) throw error;
+      return data || [];
+    },
+    staleTime: 30000,
+  });
+
+  // Calculate stats and charts
   useEffect(() => {
-    const fetchDashboardData = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      // Fetch stats
-      const [tasksResult, docsResult, membersResult] = await Promise.all([
-        supabase.from("tasks").select("status, priority"),
-        supabase.from("documents").select("is_approved"),
-        supabase.from("profiles").select("id").eq("is_active", true),
-      ]);
-
-      const tasks = tasksResult.data || [];
+    if (tasks && documents && members) {
       const completedCount = tasks.filter(t => t.status === "completed").length;
 
       setStats({
         totalTasks: tasks.length,
         completedTasks: completedCount,
-        pendingDocs: (docsResult.data || []).filter(d => !d.is_approved).length,
-        teamMembers: (membersResult.data || []).length,
+        pendingDocs: documents.filter(d => !d.is_approved).length,
+        teamMembers: members.length,
       });
-
-      // Fetch recent tasks
-      const { data: recentTasksData } = await supabase
-        .from("tasks")
-        .select("*, profiles!tasks_assigned_to_fkey(full_name)")
-        .order("created_at", { ascending: false })
-        .limit(5);
-
-      setRecentTasks(recentTasksData || []);
 
       // Calculate task distribution
       const statusCounts: Record<string, number> = {};
@@ -64,10 +103,16 @@ const Dashboard = () => {
       setTasksByPriority(
         Object.entries(priorityCounts).map(([name, value]) => ({ name, value }))
       );
-    };
+    }
+  }, [tasks, documents, members]);
 
-    fetchDashboardData();
-  }, []);
+  useEffect(() => {
+    if (recentTasksData) {
+      setRecentTasks(recentTasksData as Task[]);
+    }
+  }, [recentTasksData]);
+
+  const isLoading = tasksLoading || docsLoading || membersLoading || recentLoading;
 
   const completionRate = stats.totalTasks > 0 
     ? Math.round((stats.completedTasks / stats.totalTasks) * 100) 
@@ -182,7 +227,13 @@ const Dashboard = () => {
             <CardDescription>Latest task updates from your team</CardDescription>
           </CardHeader>
           <CardContent>
-            {recentTasks.length === 0 ? (
+            {isLoading ? (
+              <div className="space-y-4">
+                <Skeleton className="h-20 w-full" />
+                <Skeleton className="h-20 w-full" />
+                <Skeleton className="h-20 w-full" />
+              </div>
+            ) : recentTasks.length === 0 ? (
               <p className="text-center text-muted-foreground py-8">
                 No tasks yet. Create your first task to get started.
               </p>

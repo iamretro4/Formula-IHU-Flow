@@ -15,6 +15,9 @@ import { LayoutDashboard, CheckSquare, FileText, Users, LogOut, Menu, Target, Wo
 import { useToast } from "@/hooks/use-toast";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import formulaIhuLogo from "@/assets/formula-ihu-logo.png";
+import { Profile } from "@/types";
+import { ThemeToggle } from "@/components/ThemeToggle";
+import { NotificationCenter } from "@/components/NotificationCenter";
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -23,7 +26,7 @@ interface DashboardLayoutProps {
 const DashboardLayout = ({ children }: DashboardLayoutProps) => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [profile, setProfile] = useState<any>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -31,7 +34,7 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
       const { data: { session } } = await supabase.auth.getSession();
       
       if (!session) {
-        navigate("/auth");
+        navigate("/");
         return;
       }
 
@@ -49,7 +52,7 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === "SIGNED_OUT") {
-        navigate("/auth");
+        navigate("/");
       }
     });
 
@@ -81,12 +84,16 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
   const NavContent = () => (
     <div className="flex flex-col h-full">
       <div className="p-6 border-b border-border">
-        <div className="flex items-center justify-center">
+        <div className="flex items-center justify-between">
           <img 
             src={formulaIhuLogo} 
             alt="Formula IHU" 
             className="h-12 object-contain"
           />
+          <div className="flex items-center gap-2">
+            <NotificationCenter />
+            <ThemeToggle />
+          </div>
         </div>
       </div>
 
@@ -156,16 +163,20 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
             alt="Formula IHU" 
             className="h-8 sm:h-10 object-contain"
           />
-          <Sheet>
-            <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" className="touch-target">
-                <Menu className="h-5 w-5" />
-              </Button>
-            </SheetTrigger>
+          <div className="flex items-center gap-2">
+            <NotificationCenter />
+            <ThemeToggle />
+            <Sheet>
+              <SheetTrigger asChild>
+                <Button variant="ghost" size="icon" className="touch-target">
+                  <Menu className="h-5 w-5" />
+                </Button>
+              </SheetTrigger>
             <SheetContent side="left" className="w-64 sm:w-80 p-0">
               <NavContent />
             </SheetContent>
           </Sheet>
+          </div>
         </header>
       </div>
 

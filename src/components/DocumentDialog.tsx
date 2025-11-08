@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import type { Database } from "@/integrations/supabase/types";
-import { Upload, FileText } from "lucide-react";
+import { FileUploadZone } from "@/components/FileUploadZone";
 
 type DocumentDialogProps = {
   open: boolean;
@@ -20,6 +20,7 @@ type DocumentDialogProps = {
 export function DocumentDialog({ open, onOpenChange, onSuccess, document }: DocumentDialogProps) {
   const [loading, setLoading] = useState(false);
   const [file, setFile] = useState<File | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -50,48 +51,8 @@ export function DocumentDialog({ open, onOpenChange, onSuccess, document }: Docu
     }
   }, [open, document]);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const selectedFile = e.target.files[0];
-      
-      // Validate file size (50MB limit)
-      const maxSize = 50 * 1024 * 1024; // 50MB in bytes
-      if (selectedFile.size > maxSize) {
-        toast({
-          variant: "destructive",
-          title: "File too large",
-          description: `File size must be less than 50MB. Current size: ${(selectedFile.size / 1024 / 1024).toFixed(2)}MB`,
-        });
-        e.target.value = ""; // Reset input
-        return;
-      }
-
-      // Validate file type
-      const allowedTypes = [
-        'application/pdf',
-        'application/msword',
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'application/vnd.ms-excel',
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'application/vnd.ms-powerpoint',
-        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-        'image/jpeg',
-        'image/png',
-        'text/plain'
-      ];
-      
-      if (!allowedTypes.includes(selectedFile.type)) {
-        toast({
-          variant: "destructive",
-          title: "Invalid file type",
-          description: "Please upload PDF, Word, Excel, PowerPoint, Image, or Text files only.",
-        });
-        e.target.value = ""; // Reset input
-        return;
-      }
-
-      setFile(selectedFile);
-    }
+  const handleFileSelect = (selectedFile: File | null) => {
+    setFile(selectedFile);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -109,9 +70,25 @@ export function DocumentDialog({ open, onOpenChange, onSuccess, document }: Docu
         const fileExt = file.name.split('.').pop();
         const filePath = `${user.id}/${Date.now()}.${fileExt}`;
         
+        setUploadProgress(0);
+        
+        // Simulate upload progress (Supabase doesn't provide progress events)
+        const progressInterval = setInterval(() => {
+          setUploadProgress((prev) => {
+            if (prev >= 90) {
+              clearInterval(progressInterval);
+              return 90;
+            }
+            return prev + 10;
+          });
+        }, 200);
+        
         const { error: uploadError } = await supabase.storage
           .from('documents')
           .upload(filePath, file);
+
+        clearInterval(progressInterval);
+        setUploadProgress(100);
 
         if (uploadError) throw uploadError;
 
@@ -120,6 +97,7 @@ export function DocumentDialog({ open, onOpenChange, onSuccess, document }: Docu
           .getPublicUrl(filePath);
 
         file_url = publicUrl;
+        setUploadProgress(0);
       }
 
       const docData: Database["public"]["Tables"]["documents"]["Insert"] = {
@@ -228,37 +206,16 @@ export function DocumentDialog({ open, onOpenChange, onSuccess, document }: Docu
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="file">Upload File</Label>
-            <div className="border-2 border-dashed border-border rounded-lg p-6 text-center hover:border-primary transition-colors">
-              <input
-                id="file"
-                type="file"
-                onChange={handleFileChange}
-                className="hidden"
-                accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.txt"
-              />
-              <label htmlFor="file" className="cursor-pointer flex flex-col items-center gap-2">
-                {file ? (
-                  <>
-                    <FileText className="h-8 w-8 text-primary" />
-                    <p className="text-sm font-medium">{file.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {(file.size / 1024 / 1024).toFixed(2)} MB
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <Upload className="h-8 w-8 text-muted-foreground" />
-                    <p className="text-sm text-muted-foreground">
-                      Click to upload or drag and drop
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      PDF, DOC, XLS, PPT, JPG, PNG, TXT (Max 50MB)
-                    </p>
-                  </>
-                )}
-              </label>
-            </div>
+            <Label>Upload File</Label>
+            <FileUploadZone
+              onFileSelect={handleFileSelect}
+              accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.txt"
+              maxSize={50 * 1024 * 1024}
+              disabled={loading}
+              currentFile={file}
+              uploadProgress={uploadProgress}
+              isUploading={loading && uploadProgress > 0}
+            />
           </div>
 
           <DialogFooter>

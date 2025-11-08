@@ -4,9 +4,10 @@ import DashboardLayout from "@/components/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { History, Search, User, Calendar, Filter } from "lucide-react";
+import { History, Search, User, Calendar, Download } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
@@ -15,6 +16,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { usePagination } from "@/hooks/usePagination";
+import { PaginationControls } from "@/components/PaginationControls";
+import { exportToCSV } from "@/utils/export";
+import { useDebounce } from "@/hooks/useDebounce";
+import { formatDistanceToNow, format, parseISO } from "date-fns";
+import { AdvancedFilters, FilterState } from "@/components/AdvancedFilters";
 
 type Activity = {
   id: string;
@@ -39,8 +46,19 @@ const ActivityLog = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [entityFilter, setEntityFilter] = useState<string>("all");
+  const [itemsPerPage, setItemsPerPage] = useState(50);
+  const [advancedFilters, setAdvancedFilters] = useState<FilterState>({});
   const { toast } = useToast();
   const navigate = useNavigate();
+
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
+
+  const {
+    paginatedData: paginatedActivities,
+    currentPage,
+    totalPages,
+    goToPage,
+  } = usePagination(filteredActivities, itemsPerPage);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -71,11 +89,11 @@ const ActivityLog = () => {
   useEffect(() => {
     let filtered = activities;
 
-    if (searchQuery) {
+    if (debouncedSearchQuery) {
       filtered = filtered.filter(
         (activity) =>
-          activity.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          activity.user?.full_name.toLowerCase().includes(searchQuery.toLowerCase())
+          activity.description.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+          activity.user?.full_name.toLowerCase().includes(debouncedSearchQuery.toLowerCase())
       );
     }
 
@@ -87,8 +105,26 @@ const ActivityLog = () => {
       filtered = filtered.filter((activity) => activity.entity_type === entityFilter);
     }
 
+    // Apply date range filter
+    if (advancedFilters.dateRange?.from || advancedFilters.dateRange?.to) {
+      filtered = filtered.filter((activity) => {
+        const activityDate = parseISO(activity.created_at);
+        if (advancedFilters.dateRange?.from && activityDate < advancedFilters.dateRange.from) {
+          return false;
+        }
+        if (advancedFilters.dateRange?.to) {
+          const toDate = new Date(advancedFilters.dateRange.to);
+          toDate.setHours(23, 59, 59, 999);
+          if (activityDate > toDate) {
+            return false;
+          }
+        }
+        return true;
+      });
+    }
+
     setFilteredActivities(filtered);
-  }, [activities, searchQuery, typeFilter, entityFilter]);
+  }, [activities, debouncedSearchQuery, typeFilter, entityFilter, advancedFilters]);
 
   const fetchActivities = async () => {
     try {
@@ -96,7 +132,7 @@ const ActivityLog = () => {
         .from("activities")
         .select("*")
         .order("created_at", { ascending: false })
-        .limit(500);
+        .limit(1000);
 
       if (error) throw error;
 
@@ -128,6 +164,26 @@ const ActivityLog = () => {
     }
   };
 
+  const handleExport = () => {
+    const csvData = filteredActivities.map((activity) => ({
+      Type: getTypeLabel(activity.type),
+      Description: activity.description,
+      Entity: activity.entity_type || "",
+      User: activity.user?.full_name || "System",
+      Date: format(parseISO(activity.created_at), "PPpp"),
+      "Relative Time": formatDistanceToNow(parseISO(activity.created_at), { addSuffix: true }),
+    }));
+
+    exportToCSV(csvData, `activity-log-${new Date().toISOString().split("T")[0]}`, [
+      "Type",
+      "Description",
+      "Entity",
+      "User",
+      "Date",
+      "Relative Time",
+    ]);
+  };
+
   const getActivityIcon = (type: string) => {
     if (type.includes("created")) return "➕";
     if (type.includes("updated")) return "✏️";
@@ -138,10 +194,10 @@ const ActivityLog = () => {
   };
 
   const getActivityColor = (type: string) => {
-    if (type.includes("created")) return "bg-blue-500/20 text-blue-700";
-    if (type.includes("deleted")) return "bg-red-500/20 text-red-700";
-    if (type.includes("completed") || type.includes("approved")) return "bg-green-500/20 text-green-700";
-    return "bg-gray-500/20 text-gray-700";
+    if (type.includes("created")) return "bg-blue-500/20 text-blue-700 dark:text-blue-400";
+    if (type.includes("deleted")) return "bg-red-500/20 text-red-700 dark:text-red-400";
+    if (type.includes("completed") || type.includes("approved")) return "bg-green-500/20 text-green-700 dark:text-green-400";
+    return "bg-gray-500/20 text-gray-700 dark:text-gray-400";
   };
 
   const getTypeLabel = (type: string) => {
@@ -158,6 +214,10 @@ const ActivityLog = () => {
               Complete audit trail of all system activities
             </p>
           </div>
+          <Button variant="outline" onClick={handleExport}>
+            <Download className="mr-2 h-4 w-4" />
+            Export CSV
+          </Button>
         </div>
 
         {/* Filters */}
@@ -197,6 +257,12 @@ const ActivityLog = () => {
               <SelectItem value="milestone">Milestones</SelectItem>
             </SelectContent>
           </Select>
+          <AdvancedFilters
+            onFilterChange={setAdvancedFilters}
+            availableFilters={{
+              status: ["created", "updated", "deleted", "completed", "approved"],
+            }}
+          />
         </div>
 
         {loading ? (
@@ -223,54 +289,68 @@ const ActivityLog = () => {
             </CardContent>
           </Card>
         ) : (
-          <Card>
-            <CardContent className="p-0">
-              <div className="divide-y">
-                {filteredActivities.map((activity) => (
-                  <div key={activity.id} className="p-4 hover:bg-muted/50 transition-colors">
-                    <div className="flex items-start gap-3">
-                      <div className="text-2xl">{getActivityIcon(activity.type)}</div>
-                      <div className="flex-1 space-y-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <p className="font-medium">{activity.description}</p>
-                          <Badge className={getActivityColor(activity.type)}>
-                            {getTypeLabel(activity.type)}
-                          </Badge>
-                          {activity.entity_type && (
-                            <Badge variant="outline" className="text-xs">
-                              {activity.entity_type}
+          <>
+            <Card>
+              <CardContent className="p-0">
+                <div className="divide-y">
+                  {paginatedActivities.map((activity) => (
+                    <div key={activity.id} className="p-4 hover:bg-muted/50 transition-colors">
+                      <div className="flex items-start gap-3">
+                        <div className="text-2xl">{getActivityIcon(activity.type)}</div>
+                        <div className="flex-1 space-y-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-medium">{activity.description}</p>
+                            <Badge className={getActivityColor(activity.type)}>
+                              {getTypeLabel(activity.type)}
                             </Badge>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                          {activity.user && (
+                            {activity.entity_type && (
+                              <Badge variant="outline" className="text-xs">
+                                {activity.entity_type}
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                            {activity.user && (
+                              <div className="flex items-center gap-1">
+                                <User className="h-3 w-3" />
+                                <span>{activity.user.full_name}</span>
+                              </div>
+                            )}
                             <div className="flex items-center gap-1">
-                              <User className="h-3 w-3" />
-                              <span>{activity.user.full_name}</span>
+                              <Calendar className="h-3 w-3" />
+                              <span>{format(parseISO(activity.created_at), "PPp")}</span>
+                              <span className="ml-2">
+                                ({formatDistanceToNow(parseISO(activity.created_at), { addSuffix: true })})
+                              </span>
+                            </div>
+                          </div>
+                          {activity.metadata && Object.keys(activity.metadata).length > 0 && (
+                            <div className="mt-2 text-xs text-muted-foreground">
+                              <details>
+                                <summary className="cursor-pointer">View details</summary>
+                                <pre className="mt-2 p-2 bg-muted rounded text-xs overflow-auto">
+                                  {JSON.stringify(activity.metadata, null, 2)}
+                                </pre>
+                              </details>
                             </div>
                           )}
-                          <div className="flex items-center gap-1">
-                            <Calendar className="h-3 w-3" />
-                            <span>{new Date(activity.created_at).toLocaleString()}</span>
-                          </div>
                         </div>
-                        {activity.metadata && Object.keys(activity.metadata).length > 0 && (
-                          <div className="mt-2 text-xs text-muted-foreground">
-                            <details>
-                              <summary className="cursor-pointer">View details</summary>
-                              <pre className="mt-2 p-2 bg-muted rounded text-xs overflow-auto">
-                                {JSON.stringify(activity.metadata, null, 2)}
-                              </pre>
-                            </details>
-                          </div>
-                        )}
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+            
+            <PaginationControls
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={goToPage}
+              itemsPerPage={itemsPerPage}
+              onItemsPerPageChange={setItemsPerPage}
+              totalItems={filteredActivities.length}
+            />
+          </>
         )}
       </div>
     </DashboardLayout>
@@ -278,4 +358,3 @@ const ActivityLog = () => {
 };
 
 export default ActivityLog;
-

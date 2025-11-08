@@ -12,6 +12,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { TeamMemberDialog } from "@/components/TeamMemberDialog";
 import { WorkloadProductivityCard } from "@/components/WorkloadProductivityCard";
 import { calculateAllWorkloads, calculateAllProductivity } from "@/lib/workload";
+import { usePagination } from "@/hooks/usePagination";
+import { PaginationControls } from "@/components/PaginationControls";
+import { exportToCSV } from "@/utils/export";
+import { Download } from "lucide-react";
 
 type Profile = {
   id: string;
@@ -41,8 +45,16 @@ const Team = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedMember, setSelectedMember] = useState<UserWithRole | undefined>(undefined);
   const [showWorkload, setShowWorkload] = useState(true);
+  const [itemsPerPage, setItemsPerPage] = useState(20);
   const { toast } = useToast();
   const navigate = useNavigate();
+  
+  const {
+    paginatedData: paginatedMembers,
+    currentPage,
+    totalPages,
+    goToPage,
+  } = usePagination(members, itemsPerPage);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -132,6 +144,28 @@ const Team = () => {
       .slice(0, 2);
   };
 
+  const handleExport = () => {
+    const csvData = members.map((member) => ({
+      Name: member.full_name,
+      Email: member.email,
+      Phone: member.phone || "",
+      Department: member.department || "",
+      "Sub Team": member.sub_team || "",
+      Role: member.user_roles?.[0]?.role || "member",
+      "Is Active": member.is_active ? "Yes" : "No",
+    }));
+
+    exportToCSV(csvData, `team-${new Date().toISOString().split("T")[0]}`, [
+      "Name",
+      "Email",
+      "Phone",
+      "Department",
+      "Sub Team",
+      "Role",
+      "Is Active",
+    ]);
+  };
+
   return (
     <DashboardLayout>
       <div className="container mx-auto p-6 space-y-6">
@@ -140,12 +174,19 @@ const Team = () => {
             <h1 className="text-3xl font-bold">Team Members</h1>
             <p className="text-muted-foreground">Manage your Formula IHU team</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <Button
               variant={showWorkload ? "default" : "outline"}
               onClick={() => setShowWorkload(!showWorkload)}
             >
               {showWorkload ? "Hide" : "Show"} Workload & Productivity
+            </Button>
+            <Button 
+              variant="outline"
+              onClick={handleExport}
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Export CSV
             </Button>
             <Button onClick={() => { setSelectedMember(undefined); setDialogOpen(true); }}>
               <UserPlus className="mr-2 h-4 w-4" />
@@ -226,66 +267,77 @@ const Team = () => {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {members.map((member) => (
-              <Card key={member.id}>
-                <CardHeader>
-                  <div className="flex items-start gap-4">
-                    <Avatar className="h-12 w-12">
-                      <AvatarImage src={member.avatar_url || undefined} />
-                      <AvatarFallback className="bg-gradient-racing text-primary-foreground">
-                        {getInitials(member.full_name)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1">
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <CardTitle className="text-lg">{member.full_name}</CardTitle>
-                          <CardDescription className="text-sm">
-                            {member.sub_team || "No sub-team"}
-                          </CardDescription>
+          <>
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {paginatedMembers.map((member) => (
+                <Card key={member.id}>
+                  <CardHeader>
+                    <div className="flex items-start gap-4">
+                      <Avatar className="h-12 w-12">
+                        <AvatarImage src={member.avatar_url || undefined} />
+                        <AvatarFallback className="bg-gradient-racing text-primary-foreground">
+                          {getInitials(member.full_name)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <CardTitle className="text-lg">{member.full_name}</CardTitle>
+                            <CardDescription className="text-sm">
+                              {member.sub_team || "No sub-team"}
+                            </CardDescription>
+                          </div>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            onClick={() => { setSelectedMember(member); setDialogOpen(true); }}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
                         </div>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          onClick={() => { setSelectedMember(member); setDialogOpen(true); }}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
                       </div>
+                      <Badge variant="outline">Admin</Badge>
                     </div>
-                    <Badge variant="outline">Admin</Badge>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="flex items-center text-sm text-muted-foreground">
-                    <Mail className="mr-2 h-4 w-4" />
-                    <span className="truncate">{member.email}</span>
-                  </div>
-                  {member.phone && (
+                  </CardHeader>
+                  <CardContent className="space-y-3">
                     <div className="flex items-center text-sm text-muted-foreground">
-                      <Phone className="mr-2 h-4 w-4" />
-                      {member.phone}
+                      <Mail className="mr-2 h-4 w-4" />
+                      <span className="truncate">{member.email}</span>
                     </div>
-                  )}
-                  {member.skills && member.skills.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-2">
-                      {member.skills.slice(0, 3).map((skill, idx) => (
-                        <Badge key={idx} variant="outline" className="text-xs">
-                          {skill}
-                        </Badge>
-                      ))}
-                      {member.skills.length > 3 && (
-                        <Badge variant="outline" className="text-xs">
-                          +{member.skills.length - 3}
-                        </Badge>
-                      )}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                    {member.phone && (
+                      <div className="flex items-center text-sm text-muted-foreground">
+                        <Phone className="mr-2 h-4 w-4" />
+                        {member.phone}
+                      </div>
+                    )}
+                    {member.skills && member.skills.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {member.skills.slice(0, 3).map((skill, idx) => (
+                          <Badge key={idx} variant="outline" className="text-xs">
+                            {skill}
+                          </Badge>
+                        ))}
+                        {member.skills.length > 3 && (
+                          <Badge variant="outline" className="text-xs">
+                            +{member.skills.length - 3}
+                          </Badge>
+                        )}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+            
+            <PaginationControls
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={goToPage}
+              itemsPerPage={itemsPerPage}
+              onItemsPerPageChange={setItemsPerPage}
+              totalItems={members.length}
+            />
+          </>
         )}
       </div>
     </DashboardLayout>

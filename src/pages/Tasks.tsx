@@ -7,12 +7,18 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Calendar, User, AlertCircle, Search } from "lucide-react";
+import { Plus, Calendar, User, AlertCircle, Search, Trash2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { TaskDialog } from "@/components/TaskDialog";
 import { BulkOperations } from "@/components/BulkOperations";
 import { Checkbox } from "@/components/ui/checkbox";
+import { DeleteConfirmationDialog } from "@/components/DeleteConfirmationDialog";
+import { useDeleteTask } from "@/hooks/useTasks";
+import { usePagination } from "@/hooks/usePagination";
+import { PaginationControls } from "@/components/PaginationControls";
+import { exportTasksToCSV } from "@/utils/export";
+import { Download } from "lucide-react";
 
 type Task = {
   id: string;
@@ -43,8 +49,21 @@ const Tasks = () => {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
   const [selectedTasks, setSelectedTasks] = useState<string[]>([]);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
+  const [itemsPerPage, setItemsPerPage] = useState(20);
   const { toast } = useToast();
   const navigate = useNavigate();
+  const deleteTask = useDeleteTask();
+  
+  const {
+    paginatedData: paginatedTasks,
+    currentPage,
+    totalPages,
+    goToPage,
+    nextPage,
+    prevPage,
+  } = usePagination(filteredTasks, itemsPerPage);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -195,6 +214,21 @@ const Tasks = () => {
     return colors[priority] || colors.medium;
   };
 
+  const handleDeleteClick = (task: Task, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setTaskToDelete(task);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (taskToDelete) {
+      await deleteTask.mutateAsync(taskToDelete.id);
+      setDeleteDialogOpen(false);
+      setTaskToDelete(null);
+      fetchTasks();
+    }
+  };
+
   return (
     <DashboardLayout>
       <div className="container mx-auto p-4 sm:p-6 space-y-4 sm:space-y-6">
@@ -203,10 +237,20 @@ const Tasks = () => {
             <h1 className="text-2xl sm:text-3xl font-bold">Task Management</h1>
             <p className="text-sm sm:text-base text-muted-foreground">Manage and track team tasks</p>
           </div>
-          <Button onClick={() => { setSelectedTask(undefined); setDialogOpen(true); }} className="touch-target w-full sm:w-auto">
-            <Plus className="mr-2 h-4 w-4" />
-            Create Task
-          </Button>
+          <div className="flex gap-2">
+            <Button 
+              variant="outline"
+              onClick={() => exportTasksToCSV(filteredTasks)}
+              className="touch-target w-full sm:w-auto"
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Export CSV
+            </Button>
+            <Button onClick={() => { setSelectedTask(undefined); setDialogOpen(true); }} className="touch-target w-full sm:w-auto">
+              <Plus className="mr-2 h-4 w-4" />
+              Create Task
+            </Button>
+          </div>
         </div>
 
         {/* Search and Filters */}
@@ -252,6 +296,16 @@ const Tasks = () => {
           onOpenChange={setDialogOpen}
           task={selectedTask}
           onSuccess={fetchTasks}
+        />
+
+        <DeleteConfirmationDialog
+          open={deleteDialogOpen}
+          onOpenChange={setDeleteDialogOpen}
+          onConfirm={handleConfirmDelete}
+          title="Delete Task"
+          description="Are you sure you want to delete this task?"
+          itemName={taskToDelete?.title}
+          isLoading={deleteTask.isPending}
         />
 
         {loading ? (
@@ -309,7 +363,7 @@ const Tasks = () => {
               ]}
             />
             <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-              {filteredTasks.map((task) => (
+              {paginatedTasks.map((task) => (
                 <Card 
                 key={task.id} 
                 className={`border-l-4 ${getPriorityColor(task.priority)} hover:shadow-hover transition-shadow ${
@@ -358,15 +412,34 @@ const Tasks = () => {
                           {task.assigned_to_profile.full_name}
                         </div>
                       )}
-                      <Badge variant="outline" className="text-xs">
-                        {task.priority}
-                      </Badge>
+                      <div className="flex items-center justify-between">
+                        <Badge variant="outline" className="text-xs">
+                          {task.priority}
+                        </Badge>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                          onClick={(e) => handleDeleteClick(task, e)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </CardContent>
                   </div>
                 </div>
               </Card>
             ))}
             </div>
+            
+            <PaginationControls
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={goToPage}
+              itemsPerPage={itemsPerPage}
+              onItemsPerPageChange={setItemsPerPage}
+              totalItems={filteredTasks.length}
+            />
           </div>
         )}
       </div>

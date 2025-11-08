@@ -7,11 +7,21 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Calendar, Target, TrendingUp, CheckCircle2, Edit } from "lucide-react";
+import { Plus, Calendar, Target, TrendingUp, CheckCircle2, Edit, Trash2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ProjectDialog } from "@/components/ProjectDialog";
 import { MilestoneDialog } from "@/components/MilestoneDialog";
 import { ProjectTasksView } from "@/components/ProjectTasksView";
+import { DeleteConfirmationDialog } from "@/components/DeleteConfirmationDialog";
+import { useDeleteProject } from "@/hooks/useProjects";
+import { usePagination } from "@/hooks/usePagination";
+import { PaginationControls } from "@/components/PaginationControls";
+import { exportToCSV } from "@/utils/export";
+import { Download } from "lucide-react";
+import { BulkOperations } from "@/components/BulkOperations";
+import { Checkbox } from "@/components/ui/checkbox";
+import { DeleteConfirmationDialog } from "@/components/DeleteConfirmationDialog";
+import { format } from "date-fns";
 
 type Project = {
   id: string;
@@ -44,8 +54,21 @@ const Projects = () => {
   const [selectedProjectForMilestone, setSelectedProjectForMilestone] = useState<string>("");
   const [selectedMilestone, setSelectedMilestone] = useState<Milestone | undefined>(undefined);
   const [expandedProject, setExpandedProject] = useState<string | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
+  const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
+  const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
   const { toast } = useToast();
   const navigate = useNavigate();
+  const deleteProject = useDeleteProject();
+  
+  const {
+    paginatedData: paginatedProjects,
+    currentPage,
+    totalPages,
+    goToPage,
+  } = usePagination(projects, itemsPerPage);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -174,6 +197,87 @@ const Projects = () => {
     return diff;
   };
 
+  const handleDeleteClick = (project: Project, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setProjectToDelete(project);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (projectToDelete) {
+      await deleteProject.mutateAsync(projectToDelete.id);
+      setDeleteDialogOpen(false);
+      setProjectToDelete(null);
+      fetchProjects();
+    }
+  };
+
+  const handleBulkAction = async (action: string, projectIds: string[]) => {
+    try {
+      if (action === "delete") {
+        setBulkDeleteDialogOpen(true);
+        return;
+      } else if (action === "archive") {
+        const { error } = await supabase
+          .from("projects")
+          .update({ status: "archived" })
+          .in("id", projectIds);
+        if (error) throw error;
+        toast({ title: `${projectIds.length} project(s) archived` });
+      } else if (action === "activate") {
+        const { error } = await supabase
+          .from("projects")
+          .update({ status: "active" })
+          .in("id", projectIds);
+        if (error) throw error;
+        toast({ title: `${projectIds.length} project(s) activated` });
+      }
+      fetchProjects();
+      setSelectedProjects([]);
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message,
+      });
+    }
+  };
+
+  const handleBulkDeleteConfirm = async () => {
+    try {
+      for (const id of selectedProjects) {
+        await deleteProject.mutateAsync(id);
+      }
+      setBulkDeleteDialogOpen(false);
+      setSelectedProjects([]);
+      fetchProjects();
+    } catch (error) {
+      // Error already handled by deleteProject mutation
+    }
+  };
+
+  const handleExport = () => {
+    const csvData = projects.map((project) => ({
+      Name: project.name,
+      Description: project.description || "",
+      Status: project.status,
+      "Start Date": format(new Date(project.start_date), "PP"),
+      "End Date": format(new Date(project.end_date), "PP"),
+      "Competition Date": project.competition_date ? format(new Date(project.competition_date), "PP") : "",
+      "Created At": format(new Date(project.created_at), "PP"),
+    }));
+
+    exportToCSV(csvData, `projects-${new Date().toISOString().split("T")[0]}`, [
+      "Name",
+      "Description",
+      "Status",
+      "Start Date",
+      "End Date",
+      "Competition Date",
+      "Created At",
+    ]);
+  };
+
   const toggleMilestoneComplete = async (milestoneId: string, isCompleted: boolean) => {
     try {
       const { error } = await supabase
@@ -205,11 +309,35 @@ const Projects = () => {
             <h1 className="text-3xl font-bold">Projects & Milestones</h1>
             <p className="text-muted-foreground">Track project progress and timelines</p>
           </div>
-          <Button onClick={() => { setSelectedProject(undefined); setProjectDialogOpen(true); }}>
-            <Plus className="mr-2 h-4 w-4" />
-            New Project
-          </Button>
+          <div className="flex gap-2">
+            <Button 
+              variant="outline"
+              onClick={handleExport}
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Export CSV
+            </Button>
+            <Button onClick={() => { setSelectedProject(undefined); setProjectDialogOpen(true); }}>
+              <Plus className="mr-2 h-4 w-4" />
+              New Project
+            </Button>
+          </div>
         </div>
+
+        {/* Bulk Operations */}
+        {projects.length > 0 && (
+          <BulkOperations
+            items={projects}
+            selectedItems={selectedProjects}
+            onSelectionChange={setSelectedProjects}
+            onBulkAction={handleBulkAction}
+            availableActions={[
+              { label: "Archive", value: "archive" },
+              { label: "Activate", value: "activate" },
+              { label: "Delete", value: "delete", variant: "destructive" },
+            ]}
+          />
+        )}
 
         <ProjectDialog
           open={projectDialogOpen}
@@ -224,6 +352,26 @@ const Projects = () => {
           projectId={selectedProjectForMilestone}
           milestone={selectedMilestone}
           onSuccess={fetchProjects}
+        />
+
+        <DeleteConfirmationDialog
+          open={deleteDialogOpen}
+          onOpenChange={setDeleteDialogOpen}
+          onConfirm={handleConfirmDelete}
+          title="Delete Project"
+          description="Are you sure you want to delete this project? This will also delete all associated milestones and cannot be undone."
+          itemName={projectToDelete?.name}
+          isLoading={deleteProject.isPending}
+        />
+        
+        <DeleteConfirmationDialog
+          open={bulkDeleteDialogOpen}
+          onOpenChange={setBulkDeleteDialogOpen}
+          onConfirm={handleBulkDeleteConfirm}
+          title="Delete Projects"
+          description={`Are you sure you want to delete ${selectedProjects.length} project(s)? This will also delete all associated milestones.`}
+          itemName={`${selectedProjects.length} project(s)`}
+          isLoading={deleteProject.isPending}
         />
 
         {loading ? (
@@ -256,26 +404,37 @@ const Projects = () => {
             </CardContent>
           </Card>
         ) : (
-          <div className="space-y-6">
-            {projects.map((project) => {
-              const progress = getProjectProgress(project.id);
-              const projectMilestones = milestones[project.id] || [];
-              const daysUntilEnd = getDaysUntilDate(project.end_date);
+          <>
+            <div className="space-y-6">
+              {paginatedProjects.map((project) => {
+                const progress = getProjectProgress(project.id);
+                const projectMilestones = milestones[project.id] || [];
+                const daysUntilEnd = getDaysUntilDate(project.end_date);
 
-              return (
-                <Card key={project.id} className="shadow-card">
+                return (
+                  <Card key={project.id} className="shadow-card">
                   <CardHeader>
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <div className="flex items-start justify-between mb-2">
                           <CardTitle className="text-2xl">{project.name}</CardTitle>
-                          <Button 
-                            variant="ghost" 
-                            size="icon"
-                            onClick={() => { setSelectedProject(project); setProjectDialogOpen(true); }}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
+                          <div className="flex gap-1">
+                            <Button 
+                              variant="ghost" 
+                              size="icon"
+                              onClick={() => { setSelectedProject(project); setProjectDialogOpen(true); }}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="icon"
+                              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                              onClick={(e) => handleDeleteClick(project, e)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </div>
                         <CardDescription className="text-base">
                           {project.description || "No description"}
@@ -404,9 +563,19 @@ const Projects = () => {
                     </div>
                   </CardContent>
                 </Card>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+            
+            <PaginationControls
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={goToPage}
+              itemsPerPage={itemsPerPage}
+              onItemsPerPageChange={setItemsPerPage}
+              totalItems={projects.length}
+            />
+          </>
         )}
       </div>
     </DashboardLayout>
