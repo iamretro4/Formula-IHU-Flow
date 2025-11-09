@@ -4,29 +4,17 @@ import path from "path";
 import { componentTagger } from "lovable-tagger";
 import type { Plugin } from "vite";
 
-// Plugin to patch recharts to ensure React.Children is available
-// This fixes the "React.Children is undefined" error
+// Track which chunks need React - we'll populate this during the build
+const chunksNeedingReact = new Set<string>();
+const processedModules = new Set<string>();
+
+// Plugin to track which chunks need React
 function ensureReactGlobal(): Plugin {
   return {
     name: "ensure-react-global",
-    transform(code, id) {
-      // Only process recharts modules that use React.Children
-      if (id.includes('recharts') && id.includes('node_modules') && code.includes('React.Children')) {
-        // Patch React.Children access to use global React if local React.Children is undefined
-        // This ensures React.Children is available even if React hasn't fully initialized
-        const patchedCode = code.replace(
-          /React\.Children/g,
-          `(typeof window !== 'undefined' && window.React && window.React.Children ? window.React.Children : React.Children)`
-        );
-        
-        if (patchedCode !== code) {
-          return {
-            code: patchedCode,
-            map: null,
-          };
-        }
-      }
-      return null;
+    buildStart() {
+      chunksNeedingReact.clear();
+      processedModules.clear();
     },
   };
 }
@@ -68,34 +56,10 @@ export default defineConfig(({ mode }) => ({
               (id.includes('/react-dom/client') && id.includes('node_modules')) ||
               (id.includes('\\react-dom\\client') && id.includes('node_modules'));
             
-            // Check if this is a recharts module that imports React
-            // If so, we need to ensure React is available in chart-vendor
-            const isRecharts = id.includes('recharts');
-            const isD3 = id.includes('d3') && !id.includes('d3-gantt');
-            
-            // If this is React and we're in a recharts context, include in chart-vendor
-            // Otherwise, include React in entry chunk
+            // CRITICAL: React MUST be in entry chunk to ensure it loads first
+            // We'll use the plugin to patch recharts/@dnd-kit to use global React
             if (isReact) {
-              // Check if any module that imports this React module is recharts
-              try {
-                const moduleInfo = getModuleInfo(id);
-                if (moduleInfo) {
-                  // Check if recharts modules import this React module
-                  const isImportedByRecharts = moduleInfo.importedIds?.some(impId => 
-                    impId.includes('recharts')
-                  ) || false;
-                  
-                  // If recharts imports this React module, include it in chart-vendor
-                  // This ensures React is available when recharts executes
-                  if (isImportedByRecharts || (isRecharts && isReact)) {
-                    return 'chart-vendor';
-                  }
-                }
-              } catch (e) {
-                // If we can't determine, default to entry chunk
-              }
-              // Default: include React in entry chunk
-              return undefined;
+              return undefined; // Always include React in entry chunk
             }
             
             // React Router depends on React - also include in entry
@@ -109,7 +73,7 @@ export default defineConfig(({ mode }) => ({
             }
             
             // Recharts and d3 - put in chart-vendor chunk
-            if (isRecharts || isD3) {
+            if (id.includes('recharts') || (id.includes('d3') && !id.includes('d3-gantt'))) {
               return 'chart-vendor';
             }
             if (id.includes('react-hook-form') || id.includes('@hookform') || id.includes('zod')) {
@@ -121,6 +85,7 @@ export default defineConfig(({ mode }) => ({
             if (id.includes('@supabase')) {
               return 'supabase-vendor';
             }
+            // @dnd-kit - put in kanban chunk
             if (id.includes('@dnd-kit')) {
               return 'kanban';
             }
