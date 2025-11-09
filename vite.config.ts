@@ -50,10 +50,10 @@ export default defineConfig(({ mode }) => ({
               (id.includes('/react-dom/client') && id.includes('node_modules')) ||
               (id.includes('\\react-dom\\client') && id.includes('node_modules'));
             
-            // CRITICAL: React MUST be in entry chunk to ensure it loads first
-            // We'll use the plugin to patch recharts/@dnd-kit to use global React
+            // CRITICAL: React MUST be in a separate chunk that loads FIRST
+            // This ensures React is available before vendor code executes
             if (isReact) {
-              return undefined; // Always include React in entry chunk
+              return 'react-vendor'; // Put React in its own chunk that loads first
             }
             
             // React Router depends on React - also include in entry
@@ -116,10 +116,8 @@ export default defineConfig(({ mode }) => ({
         chunkFileNames: 'assets/js/[name]-[hash].js',
         entryFileNames: 'assets/js/[name]-[hash].js',
         assetFileNames: 'assets/[ext]/[name]-[hash].[ext]',
-        // Ensure React vendor is loaded before other vendor chunks
-        // This is handled automatically by Rollup through chunk dependencies
-        // Use manualChunks to create a react-vendor chunk that loads first
-        // All React-dependent libraries will depend on react-vendor
+        // Ensure react-vendor chunk loads before other vendor chunks
+        // This is handled by making other chunks depend on react-vendor
       },
     },
     chunkSizeWarningLimit: 1000,
