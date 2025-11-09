@@ -1,9 +1,9 @@
 // CRITICAL: Import React FIRST to ensure react-vendor chunk loads before entry code
-// This ensures React is fully loaded and available before any other code executes
 import * as React from "react";
 import * as ReactDOM from "react-dom";
+import { createRoot } from "react-dom/client";
 
-// Set React on window immediately so other code can access it
+// Set React on window immediately
 if (typeof window !== "undefined") {
   (window as any).React = React;
   (window as any).ReactDOM = ReactDOM;
@@ -19,9 +19,17 @@ if (typeof window !== "undefined") {
   }
 }
 
-import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
 
-// Render the app - React is now guaranteed to be loaded from react-vendor chunk
-createRoot(document.getElementById("root")!).render(<App />);
+// CRITICAL: Initialize React's dispatcher by rendering immediately
+// React hooks won't work until React has rendered at least once
+// We render to the actual root, not a temporary container
+const rootElement = document.getElementById("root");
+if (rootElement) {
+  const root = createRoot(rootElement);
+  
+  // Render the app - this initializes React's dispatcher
+  // All hooks will now work because React is in a rendering context
+  root.render(<App />);
+}

@@ -26,29 +26,13 @@ export default defineConfig(({ mode }) => ({
       output: {
         // Ensure proper chunk loading order
         // React vendor will be loaded before UI vendor due to dependencies
-        // COMPLETELY DIFFERENT APPROACH: Put React in separate chunk that loads FIRST
-        // This ensures React is fully loaded before entry chunk executes
+        // FINAL APPROACH: Put React in entry chunk with everything else
+        // This ensures React loads and renders before any other code executes
+        // React MUST be in the same chunk as the entry code to guarantee execution order
         manualChunks: (id, { getModuleInfo }) => {
           if (id.includes('node_modules')) {
-            // React MUST be in separate chunk that loads first
-            const isReact = 
-              (id.includes('/react/') && id.includes('node_modules')) || 
-              (id.includes('\\react\\') && id.includes('node_modules')) ||
-              (id.includes('/react-dom/') && id.includes('node_modules')) || 
-              (id.includes('\\react-dom\\') && id.includes('node_modules')) ||
-              (id.includes('/react/jsx-runtime') && id.includes('node_modules')) ||
-              (id.includes('\\react\\jsx-runtime') && id.includes('node_modules')) ||
-              (id.includes('/react-dom/client') && id.includes('node_modules')) ||
-              (id.includes('\\react-dom\\client') && id.includes('node_modules'));
-            
-            if (isReact) {
-              return 'react-vendor'; // Separate chunk that loads first
-            }
-            
-            // React Router depends on React
-            if (id.includes('react-router')) {
-              return 'react-vendor';
-            }
+            // CRITICAL: Put React in entry chunk (undefined) to ensure it executes first
+            // This guarantees React is loaded and can render before any other code runs
             
             // Only very large, non-React libraries get separate chunks
             if (id.includes('pdfjs-dist')) {
@@ -61,7 +45,8 @@ export default defineConfig(({ mode }) => ({
               return 'gantt';
             }
             
-            // Everything else goes to entry chunk
+            // EVERYTHING ELSE (including React) goes to entry chunk
+            // This ensures React loads first and can render before other code executes
             return undefined;
           }
         },
