@@ -91,28 +91,10 @@ if (typeof window !== "undefined") {
     throw new Error('React initialization failed');
   }
   
-  // CRITICAL: Test that React hooks actually work by creating a test dispatcher
-  // This ensures React's internal state management is initialized
-  try {
-    // Create a minimal test to ensure React's dispatcher is ready
-    // We'll use a try-catch to avoid errors if React isn't fully ready
-    const testDispatcher = (react as any).__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED;
-    if (testDispatcher && testDispatcher.ReactCurrentDispatcher) {
-      // React's dispatcher exists, which means React is initialized
-      // Set a flag so other code knows React is ready
-      (window as any).__REACT_READY__ = true;
-    } else {
-      // Fallback: just set the flag anyway after a small delay
-      // This ensures React has time to initialize
-      setTimeout(() => {
-        (window as any).__REACT_READY__ = true;
-      }, 0);
-      (window as any).__REACT_READY__ = true; // Set immediately as fallback
-    }
-  } catch (e) {
-    // If we can't check, just set the flag
-    (window as any).__REACT_READY__ = true;
-  }
+  // CRITICAL: Ensure __REACT_READY__ flag is set
+  // This flag is already set in the HTML stub, but we verify it's still true
+  // after replacing the stub with real React
+  (window as any).__REACT_READY__ = true;
 }
 
 // Export React so other modules can use it

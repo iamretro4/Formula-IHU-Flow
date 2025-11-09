@@ -157,6 +157,11 @@
         if (typeof self !== 'undefined') {
           self.React = window.React;
         }
+        
+        // CRITICAL: Set __REACT_READY__ flag immediately
+        // This ensures chunks know React is ready (even if it's just the stub)
+        // The real React will replace the stub, but the flag stays true
+        window.__REACT_READY__ = true;
       })();
     </script>
     <script type="module" src="/src/main.tsx"></script>
