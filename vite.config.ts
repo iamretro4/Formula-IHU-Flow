@@ -14,22 +14,38 @@ export default defineConfig(({ mode }) => ({
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },
+    dedupe: ['react', 'react-dom'], // Ensure single instance of React
   },
   build: {
     sourcemap: false, // Disable source maps in production
     cssCodeSplit: true, // Split CSS for better caching
     rollupOptions: {
       output: {
+        // Ensure proper chunk loading order
+        // React vendor will be loaded before UI vendor due to dependencies
         manualChunks: (id) => {
           // Vendor chunks
           if (id.includes('node_modules')) {
-            // Ensure React and React-DOM are always together and loaded first
-            if (id.includes('react/') || id.includes('react-dom/') || id.includes('react\\') || id.includes('react-dom\\')) {
+            // React and React-DOM - MUST be in react-vendor chunk
+            // Use more precise matching to catch all React modules
+            const isReact = 
+              (id.includes('/react/') && id.includes('node_modules')) || 
+              (id.includes('\\react\\') && id.includes('node_modules')) ||
+              (id.includes('/react-dom/') && id.includes('node_modules')) || 
+              (id.includes('\\react-dom\\') && id.includes('node_modules')) ||
+              (id.includes('/react/jsx-runtime') && id.includes('node_modules')) ||
+              (id.includes('\\react\\jsx-runtime') && id.includes('node_modules')) ||
+              (id.includes('/react-dom/client') && id.includes('node_modules')) ||
+              (id.includes('\\react-dom\\client') && id.includes('node_modules'));
+            
+            if (isReact) {
               return 'react-vendor';
             }
+            // React Router depends on React
             if (id.includes('react-router')) {
               return 'react-vendor';
             }
+            // Radix UI components - these will have react-vendor as a dependency
             if (id.includes('@radix-ui')) {
               return 'ui-vendor';
             }
@@ -68,10 +84,14 @@ export default defineConfig(({ mode }) => ({
             return 'vendor';
           }
         },
+        // Ensure proper chunk loading order
+        // React vendor will be loaded first due to dependencies
         // Optimize chunk file names
         chunkFileNames: 'assets/js/[name]-[hash].js',
         entryFileNames: 'assets/js/[name]-[hash].js',
         assetFileNames: 'assets/[ext]/[name]-[hash].[ext]',
+        // Ensure React vendor is loaded before other vendor chunks
+        // This is handled automatically by Rollup through chunk dependencies
       },
     },
     chunkSizeWarningLimit: 1000,
@@ -92,6 +112,9 @@ export default defineConfig(({ mode }) => ({
       "react-router-dom",
       "@tanstack/react-query",
       "@supabase/supabase-js",
+      "@radix-ui/react-slot",
+      "@radix-ui/react-dialog",
+      "@radix-ui/react-dropdown-menu",
     ],
     exclude: ['@tanstack/react-virtual'],
     esbuildOptions: {
