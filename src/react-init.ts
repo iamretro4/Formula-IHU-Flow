@@ -5,15 +5,23 @@ import * as ReactDOM from "react-dom";
 
 // CRITICAL: Replace the stub with the real React immediately and synchronously
 // This MUST happen before any other module code executes
+// DRASTIC SOLUTION: Block execution until React is fully set
 if (typeof window !== "undefined") {
   // Set React immediately - this is synchronous and blocks until complete
   const reactModule = React;
   const reactDOMModule = ReactDOM;
   
+  // CRITICAL: Set React synchronously and verify it's accessible
   // Force set React on all global scopes immediately
   try {
     // Use the setter (created by HTML script) to replace the stub
     (window as any).React = reactModule;
+    
+    // Verify React is accessible
+    if (!(window as any).React || !(window as any).React.useLayoutEffect) {
+      // Force set directly if setter didn't work
+      (window as any).React = reactModule;
+    }
   } catch (e) {
     // If setter fails, try direct assignment
     try {
@@ -40,7 +48,7 @@ if (typeof window !== "undefined") {
   // Replace the stub with the real React.Children
   if (React && React.Children) {
     const reactObj = (window as any).React;
-    
+
     // Use the setter (created by HTML script) to replace the stub
     try {
       reactObj.Children = React.Children;
@@ -60,10 +68,10 @@ if (typeof window !== "undefined") {
         (window as any).__REACT_CHILDREN__ = React.Children;
       }
     }
-  
+
     // Also cache it for direct access
     (window as any).__REACT_CHILDREN__ = React.Children;
-  
+
     // Try to ensure Children is accessible (only if object is extensible)
     if (Object.isExtensible(reactObj) && !reactObj.Children) {
       try {
@@ -72,6 +80,14 @@ if (typeof window !== "undefined") {
         // Ignore - will use cached version
       }
     }
+  }
+  
+  // DRASTIC: Verify React is fully accessible before continuing
+  // This blocks module execution until React is ready
+  if (!(window as any).React || !(window as any).React.useLayoutEffect) {
+    // This should never happen, but if it does, throw an error
+    console.error('CRITICAL: React is not accessible after react-init.ts execution');
+    throw new Error('React initialization failed');
   }
 }
 

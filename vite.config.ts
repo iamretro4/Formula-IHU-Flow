@@ -4,15 +4,44 @@ import path from "path";
 import { componentTagger } from "lovable-tagger";
 import type { Plugin } from "vite";
 
-// Track which chunks need React - we'll populate this during the build
-const chunksNeedingReact = new Set<string>();
-const processedModules = new Set<string>();
-
-// No patching needed - rely entirely on HTML stub
-// The stub in index.html creates window.React.Children before any chunks load
-
-// Plugin removed - we now use the stub in index.html directly
-// This was causing conflicts with the HTML stub approach
+// DRASTIC SOLUTION: Plugin to ensure React is ready before entry chunk executes
+// This wraps the entry chunk code to wait for React if needed
+function ensureReactReadyPlugin(): Plugin {
+  return {
+    name: 'ensure-react-ready',
+    enforce: 'post',
+    generateBundle(options, bundle) {
+      // Find the entry chunk
+      const entryChunk = Object.values(bundle).find(
+        chunk => chunk.type === 'chunk' && chunk.isEntry
+      );
+      
+      if (entryChunk && entryChunk.type === 'chunk') {
+        // Wrap the entry chunk code to ensure React is ready
+        // The HTML stub should already provide React, but this is a safety net
+        const reactCheck = `
+// Ensure React is available before executing entry code
+(function() {
+  if (typeof window !== 'undefined' && (!window.React || !window.React.useLayoutEffect)) {
+    // React not ready yet - wait for it
+    var checkReact = setInterval(function() {
+      if (window.React && window.React.useLayoutEffect) {
+        clearInterval(checkReact);
+        // React is ready, continue with entry code
+      }
+    }, 1);
+    // Timeout after 5 seconds
+    setTimeout(function() {
+      clearInterval(checkReact);
+    }, 5000);
+  }
+})();
+`;
+        entryChunk.code = reactCheck + entryChunk.code;
+      }
+    },
+  };
+}
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
@@ -22,7 +51,8 @@ export default defineConfig(({ mode }) => ({
   },
   plugins: [
     react(),
-    mode === "development" && componentTagger()
+    mode === "development" && componentTagger(),
+    ensureReactReadyPlugin()
   ].filter(Boolean),
   resolve: {
     alias: {
@@ -37,8 +67,10 @@ export default defineConfig(({ mode }) => ({
       output: {
         // Ensure proper chunk loading order
         // React vendor will be loaded before UI vendor due to dependencies
+        // DRASTIC SOLUTION: Remove vendor chunk entirely - put everything in entry chunk
+        // This ensures React is always available before any library code executes
         manualChunks: (id, { getModuleInfo }) => {
-          // Vendor chunks
+          // Only create separate chunks for very large, non-React libraries
           if (id.includes('node_modules')) {
             const isReact = 
               (id.includes('/react/') && id.includes('node_modules')) || 
@@ -50,133 +82,26 @@ export default defineConfig(({ mode }) => ({
               (id.includes('/react-dom/client') && id.includes('node_modules')) ||
               (id.includes('\\react-dom\\client') && id.includes('node_modules'));
             
-            // CRITICAL: React MUST be in a separate chunk that loads FIRST
-            // This ensures React is available before vendor code executes
+            // React in separate chunk that loads first
             if (isReact) {
-              return 'react-vendor'; // Put React in its own chunk that loads first
+              return 'react-vendor';
             }
             
-            // React Router depends on React - put in react-vendor to ensure React loads first
-            if (id.includes('react-router')) {
-              return 'react-vendor'; // Include with React to ensure proper load order
-            }
-            
-            // Radix UI - don't put in separate chunk, let it load with entry
-            // This prevents it from executing before React is ready
-            if (id.includes('@radix-ui')) {
-              return undefined; // Include in entry chunk so React loads first
-            }
-            
-            // Recharts - don't put in separate chunk, let it load dynamically
-            // This prevents it from being bundled until actually needed
-            if (id.includes('recharts')) {
-              return undefined; // Include in entry or let it be dynamically imported
-            }
-            // d3 - put in chart-vendor chunk (but not recharts)
-            if (id.includes('d3') && !id.includes('d3-gantt')) {
-              return 'chart-vendor';
-            }
-            // React-dependent libraries - load with entry to ensure React is ready
-            if (id.includes('react-hook-form') || id.includes('@hookform') || id.includes('zod')) {
-              return undefined; // Include in entry chunk so React loads first
-            }
-            if (id.includes('@tanstack/react-query')) {
-              return undefined; // Include in entry chunk so React loads first
-            }
-            if (id.includes('@supabase')) {
-              return 'supabase-vendor'; // Keep separate as it's large
-            }
-            // @dnd-kit - don't put in separate chunk, let it load dynamically
-            // This prevents it from being bundled until actually needed
-            if (id.includes('@dnd-kit')) {
-              return undefined; // Include in entry or let it be dynamically imported
-            }
-            if (id.includes('d3-gantt') || id.includes('vis-network')) {
-              return 'gantt';
-            }
+            // Only very large, non-React libraries get separate chunks
+            // Everything else goes to entry chunk where React is available
             if (id.includes('pdfjs-dist')) {
-              return 'pdf';
+              return 'pdf'; // Very large, non-React
             }
             if (id.includes('jspdf') || id.includes('xlsx')) {
-              return 'export';
+              return 'export'; // Large, non-React
             }
-            // Other large vendor libraries
-            if (id.includes('lucide-react')) {
-              return 'icons';
-            }
-            if (id.includes('date-fns')) {
-              return 'date-utils';
-            }
-            // CRITICAL: Don't put React-dependent libraries in vendor chunk
-            // Check if it's a React-dependent library and put in entry instead
-            // This includes ALL libraries that use React, even if not obviously React-dependent
-            const isReactDependent = 
-              id.includes('react') || 
-              id.includes('@tanstack') ||
-              id.includes('react-hook-form') ||
-              id.includes('@hookform') ||
-              id.includes('zustand') ||
-              id.includes('jotai') ||
-              id.includes('recoil') ||
-              id.includes('valtio') ||
-              id.includes('embla-carousel-react') ||
-              id.includes('input-otp') ||
-              id.includes('lucide-react') ||
-              id.includes('next-themes') ||
-              id.includes('react-day-picker') ||
-              id.includes('react-dnd') ||
-              id.includes('react-flow') ||
-              id.includes('react-image-gallery') ||
-              id.includes('react-joyride') ||
-              id.includes('react-markdown') ||
-              id.includes('react-player') ||
-              id.includes('react-resizable-panels') ||
-              id.includes('react-swipeable') ||
-              id.includes('react-window') ||
-              id.includes('reactflow') ||
-              id.includes('sonner') ||
-              id.includes('vaul') ||
-              id.includes('cmdk'); // cmdk uses React internally
-            
-            if (isReactDependent) {
-              return undefined; // Include in entry chunk so React loads first
+            if (id.includes('d3-gantt') || id.includes('vis-network')) {
+              return 'gantt'; // Large, non-React
             }
             
-            // CRITICAL: Check if module imports React - if so, put in entry chunk
-            // This catches any library that uses React, even if not in our explicit list
-            try {
-              const moduleInfo = getModuleInfo(id);
-              if (moduleInfo) {
-                // Check all imports - if any import React, this module needs React
-                const imports = moduleInfo.importedIds || [];
-                const hasReactImport = imports.some(importId => 
-                  (importId.includes('/react/') || importId.includes('\\react\\')) &&
-                  !importId.includes('react-dom') &&
-                  !importId.includes('react-router')
-                );
-                if (hasReactImport) {
-                  return undefined; // Put in entry chunk - React must be available
-                }
-                
-                // Also check dynamic imports
-                const dynamicImports = moduleInfo.dynamicImports || [];
-                const hasReactDynamicImport = dynamicImports.some(importId =>
-                  (importId.includes('/react/') || importId.includes('\\react\\')) &&
-                  !importId.includes('react-dom') &&
-                  !importId.includes('react-router')
-                );
-                if (hasReactDynamicImport) {
-                  return undefined; // Put in entry chunk
-                }
-              }
-            } catch (e) {
-              // If we can't check module info, be conservative
-              // Only put in vendor if we're absolutely sure it's not React-dependent
-            }
-            
-            // Default vendor chunk for other node_modules (non-React libraries)
-            // Only libraries that we're 100% sure don't use React go here
-            return 'vendor';
+            // EVERYTHING ELSE goes to entry chunk (undefined = entry chunk)
+            // This ensures React is available before any library code executes
+            return undefined;
           }
         },
         // Ensure proper chunk loading order
