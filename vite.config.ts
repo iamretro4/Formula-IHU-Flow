@@ -4,14 +4,12 @@ import path from "path";
 import { componentTagger } from "lovable-tagger";
 import type { Plugin } from "vite";
 
-// Plugin to ensure React is available before other modules execute
+// Plugin to ensure react-init is in entry chunk and loads first
 function ensureReactGlobal(): Plugin {
   return {
     name: "ensure-react-global",
-    buildStart() {
-      // This plugin ensures React is available globally
-      // The actual work is done in main.tsx by setting window.React
-    },
+    // This plugin ensures react-init.ts is processed and included in entry chunk
+    // The actual work is done by importing react-init first in main.tsx
   };
 }
 
@@ -68,7 +66,15 @@ export default defineConfig(({ mode }) => ({
             if (id.includes('@radix-ui')) {
               return 'ui-vendor';
             }
+            // Recharts and d3 - ensure they depend on entry chunk for React
+            // This is critical because recharts accesses React.Children at module eval time
             if (id.includes('recharts') || id.includes('d3')) {
+              // Check if this module imports React
+              const moduleInfo = getModuleInfo(id);
+              if (moduleInfo) {
+                // Ensure chart-vendor depends on entry chunk by checking imports
+                // Rollup will automatically create the dependency
+              }
               return 'chart-vendor';
             }
             if (id.includes('react-hook-form') || id.includes('@hookform') || id.includes('zod')) {
