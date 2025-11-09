@@ -1,3 +1,6 @@
+// CRITICAL: Preload React-dependent libraries first
+import "@/lib/preload-react-libs";
+
 import { useEffect, useState, useMemo, memo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import DashboardLayout from "@/components/DashboardLayout";

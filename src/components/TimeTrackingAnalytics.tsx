@@ -1,3 +1,6 @@
+// CRITICAL: Preload React-dependent libraries first
+import "@/lib/preload-react-libs";
+
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
