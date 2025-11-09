@@ -24,119 +24,33 @@
   <body>
     <div id="root"></div>
     <script>
-      // CRITICAL: Pre-initialize React with a fully functional stub
-      // This must execute BEFORE any module code, including prepended safety checks
+      // COMPLETELY DIFFERENT APPROACH: Ensure React.Children exists as a truthy object
+      // This must run before any module code, including prepended safety checks
       (function() {
-        'use strict';
-        
-        // Create a comprehensive stub Children object that matches React's API
-        var createStubChildren = function() {
-          return {
-            map: function(children, fn, ctx) { 
-              if (children == null) return null;
-              var result = [];
-              var count = 0;
-              if (Array.isArray(children)) {
-                for (var i = 0; i < children.length; i++) {
-                  var mapped = fn.call(ctx, children[i], i);
-                  if (mapped != null) result.push(mapped);
-                }
-              } else {
-                var mapped = fn.call(ctx, children, 0);
-                if (mapped != null) result.push(mapped);
-              }
-              return result.length === 0 ? null : result.length === 1 ? result[0] : result;
-            },
-            forEach: function(children, fn, ctx) {
-              if (children == null) return;
-              if (Array.isArray(children)) {
-                for (var i = 0; i < children.length; i++) {
-                  fn.call(ctx, children[i], i);
-                }
-              } else {
-                fn.call(ctx, children, 0);
-              }
-            },
-            count: function(children) {
-              return children == null ? 0 : Array.isArray(children) ? children.length : 1;
-            },
-            only: function(children) {
-              return Array.isArray(children) && children.length === 1 ? children[0] : null;
-            },
-            toArray: function(children) {
-              return children == null ? [] : Array.isArray(children) ? children : [children];
-            }
-          };
-        };
-        
-        var stubChildren = createStubChildren();
-        
-        // Always ensure React and React.Children exist
+        // Initialize React object if it doesn't exist
         if (!window.React) {
-          window.React = { Children: stubChildren };
+          window.React = {};
         }
         
-        // Always ensure Children exists and is valid
-        if (!window.React.Children || typeof window.React.Children.map !== 'function') {
-          window.React.Children = stubChildren;
+        // Initialize Children as a truthy object (not null/undefined)
+        // This prevents "can't access property" errors
+        if (!window.React.Children || window.React.Children === null) {
+          window.React.Children = { __stub: true };
         }
         
-        // Cache it
-        window.__REACT_CHILDREN__ = window.React.Children;
-        
-        // Ensure Children is always accessible via defineProperty for extra safety
-        try {
-          var currentChildren = window.React.Children;
-          Object.defineProperty(window.React, 'Children', {
-            get: function() {
-              return window.__REACT_CHILDREN__ || currentChildren || stubChildren;
-            },
-            set: function(value) {
-              window.__REACT_CHILDREN__ = value;
-              currentChildren = value;
-            },
-            configurable: true,
-            enumerable: true
-          });
-        } catch (e) {
-          // If defineProperty fails, ensure it's set directly
-          window.React.Children = window.React.Children || stubChildren;
-        }
-        
-        // Monitor and update when real React loads
-        var checkCount = 0;
-        var checkInterval = setInterval(function() {
-          checkCount++;
-          var react = window.React;
-          
-          // Check if real React has loaded (has more properties than our stub)
-          if (react && 
-              react.Children && 
-              typeof react.createElement === 'function' &&
-              react !== window.__REACT_STUB__) {
-            // Real React detected - ensure Children is set
-            if (react.Children && typeof react.Children.map === 'function') {
-              window.__REACT_CHILDREN__ = react.Children;
-              // Update the getter if it exists, or set directly
-              try {
-                if (window.React.Children !== react.Children) {
-                  window.React.Children = react.Children;
-                }
-              } catch (e) {
-                // Ignore
-              }
-              clearInterval(checkInterval);
-            }
-          }
-          
-          // Stop checking after 100 attempts (500ms)
-          if (checkCount > 100) {
-            clearInterval(checkInterval);
-          }
-        }, 5);
-        
-        // Mark this as the stub
-        window.__REACT_STUB__ = window.React;
+        // Ensure it's always truthy and accessible
+        Object.defineProperty(window.React, 'Children', {
+          get: function() {
+            // Return the real Children if available, otherwise return stub
+            return this.__realChildren || window.__REACT_CHILDREN__ || { __stub: true };
+          },
+          set: function(value) {
+            this.__realChildren = value;
+            window.__REACT_CHILDREN__ = value;
+          },
+          configurable: true,
+          enumerable: true
+        });
       })();
     </script>
     <script type="module" src="/src/main.tsx"></script>

@@ -3,46 +3,33 @@
 import * as React from "react";
 import * as ReactDOM from "react-dom";
 
-// Make React available globally IMMEDIATELY and synchronously
-// This MUST happen before any async chunks execute
+// COMPLETELY DIFFERENT APPROACH: Set React and ensure Children is always available
+// This runs synchronously before any other code
 if (typeof window !== "undefined") {
-  // Set React immediately - this is critical
-  // Replace the placeholder with the real React
+  // Set React immediately
   (window as any).React = React;
   (window as any).ReactDOM = ReactDOM;
   
-  // CRITICAL: Ensure React.Children is explicitly set and accessible
-  // This must happen immediately and cannot fail
+  // CRITICAL: Set React.Children - use the setter if it exists, otherwise direct assignment
   if (React && React.Children) {
-    // Set it multiple ways to ensure it's always available
-    (window as any).React.Children = React.Children;
+    // Try to use the setter first (if HTML script created one)
+    try {
+      (window as any).React.Children = React.Children;
+    } catch (e) {
+      // If setter fails, set directly
+      const reactObj = (window as any).React;
+      if (reactObj) {
+        reactObj.__realChildren = React.Children;
+        reactObj.Children = React.Children;
+      }
+    }
+    
+    // Also cache it
     (window as any).__REACT_CHILDREN__ = React.Children;
     
-    // Force set it again to override any getters
-    try {
-      Object.defineProperty((window as any).React, 'Children', {
-        value: React.Children,
-        writable: true,
-        configurable: true,
-        enumerable: true
-      });
-    } catch (e) {
-      // If defineProperty fails, the direct assignment above should work
-      (window as any).React.Children = React.Children;
-    }
-    
-    // Double-check it's set
+    // Force ensure it's set
     if (!(window as any).React.Children) {
       (window as any).React.Children = React.Children;
-    }
-  }
-  
-  // Signal that React is ready by resolving the promise if it exists
-  if ((window as any).__REACT_RESOLVER__) {
-    try {
-      (window as any).__REACT_RESOLVER__(React);
-    } catch (e) {
-      // Promise already resolved, ignore
     }
   }
 }
