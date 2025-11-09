@@ -111,6 +111,7 @@ const Index = () => {
               <div className="absolute inset-0 bg-gradient-racing opacity-20 blur-3xl rounded-full" />
               <img
                 src={heroImage}
+                loading="lazy"
                 alt="Formula Student Racing Car"
                 className="rounded-xl shadow-racing relative z-10 w-full"
               />

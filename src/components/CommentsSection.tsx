@@ -1,109 +1,174 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ThumbsUp, Reply, MoreVertical } from "lucide-react";
+import { Send, Reply, Trash2, Edit, MoreVertical, Paperclip } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { formatDistanceToNow } from "date-fns";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-
-interface CommentsSectionProps {
-  entityType: 'task' | 'document' | 'project' | 'milestone' | 'purchase_request';
-  entityId: string;
-}
+import { FileUploadZone } from "./FileUploadZone";
 
 type Comment = {
   id: string;
+  entity_type: string;
+  entity_id: string;
+  user_id: string;
   content: string;
-  author_id: string;
-  parent_comment_id: string | null;
+  parent_id: string | null;
   created_at: string;
-  is_edited: boolean;
-  author?: {
+  updated_at: string;
+  user?: {
     id: string;
     full_name: string;
-  } | null;
-  reactions?: {
-    reaction_type: string;
-    count: number;
-  }[];
+  };
+  attachments?: string[];
   replies?: Comment[];
 };
 
-const CommentsSection = ({ entityType, entityId }: CommentsSectionProps) => {
+type CommentsSectionProps = {
+  entityType: "task" | "document" | "project" | "milestone";
+  entityId: string;
+};
+
+export function CommentsSection({ entityType, entityId }: CommentsSectionProps) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState("");
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
-  const [replyContent, setReplyContent] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editContent, setEditContent] = useState("");
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
   const [user, setUser] = useState<any>(null);
+  const [attachment, setAttachment] = useState<File | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      setUser(user);
-    });
+    fetchUser();
     fetchComments();
-  }, [entityId]);
+  }, [entityType, entityId]);
+
+  const fetchUser = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    setUser(user);
+  };
 
   const fetchComments = async () => {
     try {
       const { data, error } = await supabase
-        .from("comments")
-        .select("*")
+        .from("comments" as any)
+        .select(`
+          *,
+          user:profiles(id, full_name)
+        `)
         .eq("entity_type", entityType)
         .eq("entity_id", entityId)
         .order("created_at", { ascending: true });
 
+      if (error && error.code !== "42P01") throw error;
+
+      if (data) {
+        // Organize comments into threads
+        const topLevel = data.filter((c: Comment) => !c.parent_id);
+        const withReplies = topLevel.map((comment: Comment) => ({
+          ...comment,
+          replies: data.filter((c: Comment) => c.parent_id === comment.id),
+        }));
+        setComments(withReplies);
+      }
+    } catch (error: any) {
+      console.error("Error fetching comments:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newComment.trim() && !attachment) return;
+
+    setSubmitting(true);
+    try {
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (!currentUser) throw new Error("Not authenticated");
+
+      let attachmentUrl = null;
+      if (attachment) {
+        const fileExt = attachment.name.split('.').pop();
+        const filePath = `${currentUser.id}/comments/${Date.now()}.${fileExt}`;
+        
+        const { error: uploadError } = await supabase.storage
+          .from('documents')
+          .upload(filePath, attachment);
+
+        if (uploadError) throw uploadError;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('documents')
+          .getPublicUrl(filePath);
+
+        attachmentUrl = publicUrl;
+      }
+
+      // Process @mentions
+      const mentionRegex = /@(\w+)/g;
+      const mentions: string[] = [];
+      let match;
+      while ((match = mentionRegex.exec(newComment)) !== null) {
+        mentions.push(match[1]);
+      }
+
+      const { error } = await (supabase
+        .from("comments" as any)
+        .insert({
+          entity_type: entityType,
+          entity_id: entityId,
+          user_id: currentUser.id,
+          content: newComment,
+          parent_id: replyingTo,
+          attachments: attachmentUrl ? [attachmentUrl] : null,
+          metadata: mentions.length > 0 ? { mentions } : null,
+        }) as Promise<{ error: any }>);
+
       if (error) throw error;
 
-      // Fetch author profiles
-      const commentsWithAuthors = await Promise.all(
-        (data || []).map(async (comment: any) => {
-          const { data: author } = await supabase
-            .from("profiles")
-            .select("id, full_name")
-            .eq("id", comment.author_id)
-            .single();
+      // Create notifications for mentions
+      if (mentions.length > 0) {
+        // Find mentioned users and create notifications
+        const { data: profiles } = await supabase
+          .from("profiles")
+          .select("id, full_name")
+          .or(mentions.map(m => `full_name.ilike.%${m}%`).join(','));
 
-          // Fetch reactions
-          const { data: reactions } = await supabase
-            .from("comment_reactions")
-            .select("reaction_type")
-            .eq("comment_id", comment.id);
+        if (profiles) {
+          for (const profile of profiles) {
+            await (supabase
+              .from("notifications" as any)
+              .insert({
+                user_id: profile.id,
+                type: "other",
+                title: "You were mentioned in a comment",
+                message: `${currentUser.email} mentioned you in a comment`,
+                link: `/${entityType}s?id=${entityId}`,
+              }) as Promise<{ error: any }>);
+          }
+        }
+      }
 
-          const reactionCounts = (reactions || []).reduce((acc: any, r: any) => {
-            acc[r.reaction_type] = (acc[r.reaction_type] || 0) + 1;
-            return acc;
-          }, {});
-
-          return {
-            ...comment,
-            author,
-            reactions: Object.entries(reactionCounts).map(([type, count]) => ({
-              reaction_type: type,
-              count: count as number,
-            })),
-          };
-        })
-      );
-
-      // Organize into threads (parent comments with replies)
-      const parentComments = commentsWithAuthors.filter((c) => !c.parent_comment_id);
-      const replies = commentsWithAuthors.filter((c) => c.parent_comment_id);
-
-      const organizedComments = parentComments.map((parent) => ({
-        ...parent,
-        replies: replies.filter((r) => r.parent_comment_id === parent.id),
-      }));
-
-      setComments(organizedComments);
+      setNewComment("");
+      setReplyingTo(null);
+      setAttachment(null);
+      fetchComments();
+      toast({ title: "Comment added successfully" });
     } catch (error: any) {
       toast({
         variant: "destructive",
@@ -111,114 +176,18 @@ const CommentsSection = ({ entityType, entityId }: CommentsSectionProps) => {
         description: error.message,
       });
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   };
 
-  const handleSubmitComment = async () => {
-    if (!newComment.trim() || !user) return;
-
+  const handleDelete = async (id: string) => {
     try {
-      const { error } = await supabase.from("comments").insert({
-        entity_type: entityType,
-        entity_id: entityId,
-        content: newComment.trim(),
-        author_id: user.id,
-      });
-
-      if (error) throw error;
-
-      setNewComment("");
-      fetchComments();
-      toast({ title: "Comment added" });
-    } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: error.message,
-      });
-    }
-  };
-
-  const handleReply = async (parentId: string) => {
-    if (!replyContent.trim() || !user) return;
-
-    try {
-      const { error } = await supabase.from("comments").insert({
-        entity_type: entityType,
-        entity_id: entityId,
-        content: replyContent.trim(),
-        author_id: user.id,
-        parent_comment_id: parentId,
-      });
-
-      if (error) throw error;
-
-      setReplyContent("");
-      setReplyingTo(null);
-      fetchComments();
-      toast({ title: "Reply added" });
-    } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: error.message,
-      });
-    }
-  };
-
-  const handleReaction = async (commentId: string, reactionType: string) => {
-    if (!user) return;
-
-    try {
-      // Check if user already reacted
-      const { data: existing } = await supabase
-        .from("comment_reactions")
-        .select("*")
-        .eq("comment_id", commentId)
-        .eq("user_id", user.id)
-        .eq("reaction_type", reactionType)
-        .single();
-
-      if (existing) {
-        // Remove reaction
-        await supabase
-          .from("comment_reactions")
-          .delete()
-          .eq("comment_id", commentId)
-          .eq("user_id", user.id)
-          .eq("reaction_type", reactionType);
-      } else {
-        // Add reaction
-        await supabase.from("comment_reactions").insert({
-          comment_id: commentId,
-          user_id: user.id,
-          reaction_type: reactionType,
-        });
-      }
-
-      fetchComments();
-    } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: error.message,
-      });
-    }
-  };
-
-  const handleDeleteComment = async (commentId: string) => {
-    if (!user) return;
-
-    try {
-      const { error } = await supabase
-        .from("comments")
+      const { error } = await (supabase
+        .from("comments" as any)
         .delete()
-        .eq("id", commentId)
-        .eq("author_id", user.id);
+        .eq("id", id) as Promise<{ error: any }>);
 
       if (error) throw error;
-
       fetchComments();
       toast({ title: "Comment deleted" });
     } catch (error: any) {
@@ -230,162 +199,231 @@ const CommentsSection = ({ entityType, entityId }: CommentsSectionProps) => {
     }
   };
 
+  const handleEdit = async (id: string) => {
+    try {
+      const { error } = await (supabase
+        .from("comments" as any)
+        .update({ content: editContent })
+        .eq("id", id) as Promise<{ error: any }>);
+
+      if (error) throw error;
+      setEditingId(null);
+      setEditContent("");
+      fetchComments();
+      toast({ title: "Comment updated" });
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message,
+      });
+    }
+  };
+
+  if (loading) {
+    return <div className="text-center text-muted-foreground p-4">Loading comments...</div>;
+  }
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="font-semibold">Comments ({comments.length})</h3>
-      </div>
-
-      {/* New comment form */}
-      <div className="space-y-2">
+      <form onSubmit={handleSubmit} className="space-y-2">
         <Textarea
-          placeholder="Add a comment..."
+          placeholder={replyingTo ? "Write a reply..." : "Add a comment... (Use @username to mention someone)"}
           value={newComment}
           onChange={(e) => setNewComment(e.target.value)}
           rows={3}
         />
-        <Button onClick={handleSubmitComment} disabled={!newComment.trim()}>
-          Post Comment
-        </Button>
-      </div>
+        <div className="flex items-center justify-between">
+          <FileUploadZone
+            onFileSelect={setAttachment}
+            accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+            maxSize={10 * 1024 * 1024}
+            currentFile={attachment}
+            disabled={submitting}
+          />
+          <div className="flex gap-2">
+            {replyingTo && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setReplyingTo(null)}
+              >
+                Cancel
+              </Button>
+            )}
+            <Button type="submit" disabled={submitting || (!newComment.trim() && !attachment)}>
+              <Send className="h-4 w-4 mr-2" />
+              {replyingTo ? "Reply" : "Comment"}
+            </Button>
+          </div>
+        </div>
+      </form>
 
-      {/* Comments list */}
       <div className="space-y-4">
-        {comments.map((comment) => (
-          <div key={comment.id} className="space-y-2">
-            <div className="flex gap-3">
-              <Avatar>
-                <AvatarFallback>
-                  {comment.author?.full_name
-                    .split(" ")
-                    .map((n) => n[0])
-                    .join("")
-                    .toUpperCase() || "U"}
-                </AvatarFallback>
-              </Avatar>
-              <div className="flex-1 space-y-2">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="font-medium text-sm">
-                      {comment.author?.full_name || "Unknown"}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {new Date(comment.created_at).toLocaleString()}
-                      {comment.is_edited && " (edited)"}
-                    </p>
-                  </div>
-                  {user?.id === comment.author_id && (
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-6 w-6">
-                          <MoreVertical className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent>
-                        <DropdownMenuItem
-                          onClick={() => handleDeleteComment(comment.id)}
-                          className="text-destructive"
-                        >
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  )}
-                </div>
-                <p className="text-sm">{comment.content}</p>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleReaction(comment.id, "thumbs_up")}
-                  >
-                    <ThumbsUp className="h-4 w-4 mr-1" />
-                    {comment.reactions?.find((r) => r.reaction_type === "thumbs_up")?.count || 0}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setReplyingTo(replyingTo === comment.id ? null : comment.id)}
-                  >
-                    <Reply className="h-4 w-4 mr-1" />
-                    Reply
-                  </Button>
-                </div>
+        {comments.length === 0 ? (
+          <p className="text-center text-muted-foreground py-8">No comments yet. Be the first to comment!</p>
+        ) : (
+          comments.map((comment) => (
+            <CommentItem
+              key={comment.id}
+              comment={comment}
+              currentUserId={user?.id}
+              onReply={() => setReplyingTo(comment.id)}
+              onDelete={handleDelete}
+              onEdit={(id, content) => {
+                setEditingId(id);
+                setEditContent(content);
+              }}
+              editingId={editingId}
+              editContent={editContent}
+              onEditChange={setEditContent}
+              onSaveEdit={handleEdit}
+              onCancelEdit={() => {
+                setEditingId(null);
+                setEditContent("");
+              }}
+            />
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
 
-                {/* Reply form */}
-                {replyingTo === comment.id && (
-                  <div className="ml-4 space-y-2">
-                    <Textarea
-                      placeholder="Write a reply..."
-                      value={replyContent}
-                      onChange={(e) => setReplyContent(e.target.value)}
-                      rows={2}
-                    />
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        onClick={() => handleReply(comment.id)}
-                        disabled={!replyContent.trim()}
-                      >
-                        Post Reply
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          setReplyingTo(null);
-                          setReplyContent("");
-                        }}
-                      >
-                        Cancel
-                      </Button>
-                    </div>
-                  </div>
-                )}
+function CommentItem({
+  comment,
+  currentUserId,
+  onReply,
+  onDelete,
+  onEdit,
+  editingId,
+  editContent,
+  onEditChange,
+  onSaveEdit,
+  onCancelEdit,
+}: {
+  comment: Comment;
+  currentUserId?: string;
+  onReply: () => void;
+  onDelete: (id: string) => void;
+  onEdit: (id: string, content: string) => void;
+  editingId: string | null;
+  editContent: string;
+  onEditChange: (content: string) => void;
+  onSaveEdit: (id: string) => void;
+  onCancelEdit: () => void;
+}) {
+  const isOwner = comment.user_id === currentUserId;
 
-                {/* Replies */}
-                {comment.replies && comment.replies.length > 0 && (
-                  <div className="ml-4 space-y-2 border-l-2 pl-4">
-                    {comment.replies.map((reply) => (
-                      <div key={reply.id} className="flex gap-2">
-                        <Avatar className="h-6 w-6">
-                          <AvatarFallback className="text-xs">
-                            {reply.author?.full_name
-                              .split(" ")
-                              .map((n) => n[0])
-                              .join("")
-                              .toUpperCase() || "U"}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <p className="font-medium text-xs">
-                              {reply.author?.full_name || "Unknown"}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {new Date(reply.created_at).toLocaleString()}
-                            </p>
-                          </div>
-                          <p className="text-sm">{reply.content}</p>
-                        </div>
-                      </div>
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <div className="flex gap-3">
+          <Avatar>
+            <AvatarFallback>
+              {comment.user?.full_name?.charAt(0) || "U"}
+            </AvatarFallback>
+          </Avatar>
+          <div className="flex-1 space-y-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-medium text-sm">{comment.user?.full_name || "Unknown"}</p>
+                <p className="text-xs text-muted-foreground">
+                  {formatDistanceToNow(new Date(comment.created_at), { addSuffix: true })}
+                </p>
+              </div>
+              {isOwner && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => onEdit(comment.id, comment.content)}>
+                      <Edit className="h-4 w-4 mr-2" />
+                      Edit
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => onDelete(comment.id)}
+                      className="text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+            </div>
+
+            {editingId === comment.id ? (
+              <div className="space-y-2">
+                <Textarea
+                  value={editContent}
+                  onChange={(e) => onEditChange(e.target.value)}
+                  rows={3}
+                />
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={() => onSaveEdit(comment.id)}>
+                    Save
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={onCancelEdit}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="prose prose-sm max-w-none">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {comment.content}
+                  </ReactMarkdown>
+                </div>
+                {comment.attachments && comment.attachments.length > 0 && (
+                  <div className="flex gap-2 mt-2">
+                    {comment.attachments.map((url, idx) => (
+                      <Badge key={idx} variant="outline" className="cursor-pointer">
+                        <Paperclip className="h-3 w-3 mr-1" />
+                        Attachment {idx + 1}
+                      </Badge>
                     ))}
                   </div>
                 )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onReply}
+                  className="h-8"
+                >
+                  <Reply className="h-3 w-3 mr-1" />
+                  Reply
+                </Button>
+              </>
+            )}
+
+            {comment.replies && comment.replies.length > 0 && (
+              <div className="ml-8 mt-4 space-y-3 border-l-2 pl-4">
+                {comment.replies.map((reply) => (
+                  <CommentItem
+                    key={reply.id}
+                    comment={reply}
+                    currentUserId={currentUserId}
+                    onReply={onReply}
+                    onDelete={onDelete}
+                    onEdit={onEdit}
+                    editingId={editingId}
+                    editContent={editContent}
+                    onEditChange={onEditChange}
+                    onSaveEdit={onSaveEdit}
+                    onCancelEdit={onCancelEdit}
+                  />
+                ))}
               </div>
-            </div>
+            )}
           </div>
-        ))}
-      </div>
-
-      {comments.length === 0 && !loading && (
-        <p className="text-sm text-muted-foreground text-center py-4">
-          No comments yet. Be the first to comment!
-        </p>
-      )}
-    </div>
+        </div>
+      </CardContent>
+    </Card>
   );
-};
-
-export default CommentsSection;
-
+}

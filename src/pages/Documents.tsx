@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
@@ -8,11 +8,16 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, FileText, Calendar, CheckCircle, AlertCircle, Clock, Download, ThumbsUp, ThumbsDown, Search, Eye, History, AlertTriangle, Euro, Trash2 } from "lucide-react";
+import { Plus, FileText, Calendar, CheckCircle, AlertCircle, Clock, Download, ThumbsUp, ThumbsDown, Search, Eye, History, AlertTriangle, Euro, Trash2, MessageSquare } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useMobileGestures } from "@/hooks/useMobileGestures";
+import { DocumentCardSkeleton } from "@/components/LoadingSkeletons";
 import { DocumentDialog } from "@/components/DocumentDialog";
-import { FilePreviewDialog } from "@/components/FilePreviewDialog";
+import { EnhancedFilePreview } from "@/components/EnhancedFilePreview";
+import { CommentsSection } from "@/components/CommentsSection";
+import { DocumentVersionHistory } from "@/components/DocumentVersionHistory";
 import { DeleteConfirmationDialog } from "@/components/DeleteConfirmationDialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useDeleteDocument } from "@/hooks/useDocuments";
 import { usePagination } from "@/hooks/usePagination";
 import { PaginationControls } from "@/components/PaginationControls";
@@ -45,7 +50,6 @@ type Document = {
 
 const Documents = () => {
   const [documents, setDocuments] = useState<Document[]>([]);
-  const [filteredDocuments, setFilteredDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -55,6 +59,9 @@ const Documents = () => {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewFile, setPreviewFile] = useState<{ url: string | null; name: string } | null>(null);
+  const [selectedDocumentForDetails, setSelectedDocumentForDetails] = useState<Document | null>(null);
+  const [showComments, setShowComments] = useState(false);
+  const [showVersionHistory, setShowVersionHistory] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [documentToDelete, setDocumentToDelete] = useState<Document | null>(null);
   const [selectedDocuments, setSelectedDocuments] = useState<string[]>([]);
@@ -65,6 +72,39 @@ const Documents = () => {
   const deleteDocument = useDeleteDocument();
   
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
+  
+  // Memoize filtered documents for performance - must be before usePagination
+  const filteredDocuments = useMemo(() => {
+    let filtered = documents;
+
+    // Search filter (using debounced query)
+    if (debouncedSearchQuery) {
+      const query = debouncedSearchQuery.toLowerCase();
+      filtered = filtered.filter(
+        (doc) =>
+          doc.title.toLowerCase().includes(query) ||
+          (doc.description && doc.description.toLowerCase().includes(query))
+      );
+    }
+
+    // Type filter
+    if (typeFilter !== "all") {
+      filtered = filtered.filter((doc) => doc.document_type === typeFilter);
+    }
+
+    // Status filter
+    if (statusFilter !== "all") {
+      if (statusFilter === "approved") {
+        filtered = filtered.filter((doc) => doc.is_approved);
+      } else if (statusFilter === "pending") {
+        filtered = filtered.filter((doc) => doc.submitted_at && !doc.is_approved);
+      } else if (statusFilter === "draft") {
+        filtered = filtered.filter((doc) => !doc.submitted_at);
+      }
+    }
+
+    return filtered;
+  }, [documents, debouncedSearchQuery, typeFilter, statusFilter]);
   
   const {
     paginatedData: paginatedDocuments,
@@ -101,49 +141,25 @@ const Documents = () => {
     }
   }, [user]);
 
-  useEffect(() => {
-    let filtered = documents;
-
-    // Search filter (using debounced query)
-    if (debouncedSearchQuery) {
-      filtered = filtered.filter(
-        (doc) =>
-          doc.title.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
-          (doc.description && doc.description.toLowerCase().includes(debouncedSearchQuery.toLowerCase()))
-      );
-    }
-
-    // Type filter
-    if (typeFilter !== "all") {
-      filtered = filtered.filter((doc) => doc.document_type === typeFilter);
-    }
-
-    // Status filter
-    if (statusFilter !== "all") {
-      if (statusFilter === "approved") {
-        filtered = filtered.filter((doc) => doc.is_approved);
-      } else if (statusFilter === "pending") {
-        filtered = filtered.filter((doc) => doc.submitted_at && !doc.is_approved);
-      } else if (statusFilter === "draft") {
-        filtered = filtered.filter((doc) => !doc.submitted_at);
-      }
-    }
-
-    setFilteredDocuments(filtered);
-  }, [documents, debouncedSearchQuery, typeFilter, statusFilter]);
-
   const fetchDocuments = async () => {
     try {
+      setLoading(true);
       const { data, error } = await supabase
         .from("documents")
         .select("*")
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-      const docs = data || [];
+      const docs = (data || []).map((doc: any) => ({
+        ...doc,
+        version: doc.version || 1, // Ensure version defaults to 1
+        penalty_amount: doc.penalty_amount && doc.penalty_amount !== "00" ? Number(doc.penalty_amount) : null,
+        late_submission_days: doc.late_submission_days && doc.late_submission_days !== "00" ? Number(doc.late_submission_days) : null,
+        fsg_submission_id: doc.fsg_submission_id && doc.fsg_submission_id !== "00" ? doc.fsg_submission_id : null,
+      }));
       setDocuments(docs);
-      setFilteredDocuments(docs);
     } catch (error: any) {
+      console.error("Error fetching documents:", error);
       toast({
         variant: "destructive",
         title: "Error",
@@ -217,6 +233,36 @@ const Documents = () => {
     }
   };
 
+  // Helper function to extract filename with extension from URL
+  const extractFileNameFromUrl = (url: string, fallbackTitle: string): string => {
+    try {
+      if (url.startsWith('http')) {
+        const urlObj = new URL(url);
+        const pathParts = urlObj.pathname.split('/').filter(p => p);
+        const lastPart = pathParts[pathParts.length - 1];
+        if (lastPart && lastPart.includes('.')) {
+          return decodeURIComponent(lastPart.split('?')[0]);
+        }
+      } else {
+        // Direct path
+        const pathParts = url.split('/').filter(p => p);
+        const lastPart = pathParts[pathParts.length - 1];
+        if (lastPart && lastPart.includes('.')) {
+          return lastPart;
+        }
+      }
+    } catch (e) {
+      // Fallback: try simple extraction
+      const parts = url.split('/');
+      const lastPart = parts[parts.length - 1];
+      if (lastPart && lastPart.includes('.')) {
+        return decodeURIComponent(lastPart.split('?')[0]);
+      }
+    }
+    // If no extension found, add .pdf as default (most common)
+    return fallbackTitle.includes('.') ? fallbackTitle : `${fallbackTitle}.pdf`;
+  };
+
   const handleDownloadDocument = async (doc: Document) => {
     if (!doc.file_url) {
       toast({
@@ -228,23 +274,88 @@ const Documents = () => {
     }
 
     try {
-      // Extract file path from URL
-      const url = new URL(doc.file_url);
-      const pathParts = url.pathname.split('/');
-      const filePath = pathParts.slice(pathParts.indexOf('documents') + 1).join('/');
+      let fileData: Blob | null = null;
+      let fileName = extractFileNameFromUrl(doc.file_url, doc.title);
 
-      const { data, error } = await supabase.storage
-        .from('documents')
-        .download(filePath);
+      // Try to extract file path from URL
+      let filePath = doc.file_url;
+      if (doc.file_url.startsWith('http')) {
+        try {
+          const url = new URL(doc.file_url);
+          const pathParts = url.pathname.split('/').filter(p => p);
+          
+          // Find the bucket index
+          const bucketIndex = pathParts.findIndex(part => part === 'documents');
+          if (bucketIndex >= 0 && bucketIndex < pathParts.length - 1) {
+            // Get everything after 'documents'
+            filePath = pathParts.slice(bucketIndex + 1).join('/');
+          } else {
+            // Try to get last two parts (user_id/filename)
+            filePath = pathParts.slice(-2).join('/');
+          }
+        } catch (e) {
+          // If URL parsing fails, try to extract from pathname
+          const pathParts = doc.file_url.split('/').filter(p => p);
+          const bucketIndex = pathParts.findIndex(part => part === 'documents');
+          if (bucketIndex >= 0) {
+            filePath = pathParts.slice(bucketIndex + 1).join('/');
+          } else {
+            filePath = pathParts.slice(-2).join('/');
+          }
+        }
 
-      if (error) throw error;
+        // Try to download from storage
+        const { data, error: downloadError } = await supabase.storage
+          .from('documents')
+          .download(filePath);
+
+        if (!downloadError && data) {
+          fileData = data;
+        } else {
+          // If download fails, try fetching directly from the public URL
+          const response = await fetch(doc.file_url);
+          if (response.ok) {
+            fileData = await response.blob();
+            // Try to extract filename from Content-Disposition header or URL
+            const contentDisposition = response.headers.get('Content-Disposition');
+            if (contentDisposition) {
+              const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+              if (filenameMatch) {
+                fileName = filenameMatch[1].replace(/['"]/g, '');
+              }
+            }
+            // If still no extension, use extracted filename from URL
+            if (!fileName.includes('.')) {
+              fileName = extractFileNameFromUrl(doc.file_url, doc.title);
+            }
+          } else {
+            throw new Error(`Failed to fetch file: ${response.statusText}`);
+          }
+        }
+      } else {
+        // Direct path, try to download
+        const { data, error: downloadError } = await supabase.storage
+          .from('documents')
+          .download(filePath);
+
+        if (downloadError) throw downloadError;
+        fileData = data;
+      }
+
+      if (!fileData) {
+        throw new Error("Failed to retrieve file data");
+      }
+
+      // Ensure filename has extension
+      if (!fileName.includes('.')) {
+        fileName = `${fileName}.pdf`; // Default to PDF if no extension
+      }
 
       // Create download link
-      const blob = new Blob([data]);
-      const downloadUrl = window.URL.createObjectURL(blob);
+      const downloadUrl = window.URL.createObjectURL(fileData);
       const link = document.createElement('a');
       link.href = downloadUrl;
-      link.download = doc.title;
+      link.download = fileName;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -252,10 +363,11 @@ const Documents = () => {
 
       toast({ title: "Document downloaded successfully" });
     } catch (error: any) {
+      console.error("Download error:", error);
       toast({
         variant: "destructive",
         title: "Download failed",
-        description: error.message,
+        description: error.message || "Failed to download file. Please check the file URL.",
       });
     }
   };
@@ -343,9 +455,12 @@ const Documents = () => {
     }
   };
 
+  // Mobile gestures for navigation
+  const swipeHandlers = useMobileGestures();
+
   return (
     <DashboardLayout>
-      <div className="container mx-auto p-4 sm:p-6 space-y-4 sm:space-y-6">
+      <div {...swipeHandlers} className="container mx-auto p-4 sm:p-6 space-y-4 sm:space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold">Document Repository</h1>
@@ -425,12 +540,37 @@ const Documents = () => {
         />
 
         {previewFile && (
-          <FilePreviewDialog
-          open={previewOpen}
-          onOpenChange={setPreviewOpen}
-          fileUrl={previewFile.url}
-          fileName={previewFile.name}
-        />
+          <EnhancedFilePreview
+            open={previewOpen}
+            onOpenChange={setPreviewOpen}
+            fileUrl={previewFile.url}
+            fileName={previewFile.name}
+          />
+        )}
+        
+        {selectedDocumentForDetails && (
+          <>
+            <Dialog open={showComments} onOpenChange={setShowComments}>
+              <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>Comments - {selectedDocumentForDetails.title}</DialogTitle>
+                </DialogHeader>
+                <CommentsSection entityType="document" entityId={selectedDocumentForDetails.id} />
+              </DialogContent>
+            </Dialog>
+            
+            <Dialog open={showVersionHistory} onOpenChange={setShowVersionHistory}>
+              <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>Version History - {selectedDocumentForDetails.title}</DialogTitle>
+                </DialogHeader>
+                <DocumentVersionHistory 
+                  documentId={selectedDocumentForDetails.id}
+                  currentVersion={selectedDocumentForDetails.version || 1}
+                />
+              </DialogContent>
+            </Dialog>
+          </>
         )}
 
         <DeleteConfirmationDialog
@@ -445,17 +585,8 @@ const Documents = () => {
 
         {loading ? (
           <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-            {[1, 2, 3].map((i) => (
-              <Card key={i}>
-                <CardHeader>
-                  <Skeleton className="h-5 w-3/4" />
-                  <Skeleton className="h-4 w-1/2 mt-2" />
-                </CardHeader>
-                <CardContent>
-                  <Skeleton className="h-4 w-full mb-2" />
-                  <Skeleton className="h-4 w-5/6" />
-                </CardContent>
-              </Card>
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <DocumentCardSkeleton key={i} />
             ))}
           </div>
         ) : documents.length === 0 ? (
@@ -547,7 +678,7 @@ const Documents = () => {
                       Submitted: {format(new Date(doc.submitted_at), "PP")}
                     </div>
                   )}
-                  {doc.penalty_amount && doc.penalty_amount > 0 && (
+                  {doc.penalty_amount && typeof doc.penalty_amount === 'number' && doc.penalty_amount > 0 && (
                     <div className="flex items-center text-sm text-red-600">
                       <Euro className="mr-2 h-4 w-4" />
                       <span>Penalty: €{doc.penalty_amount.toLocaleString()}</span>
@@ -556,12 +687,12 @@ const Documents = () => {
                       )}
                     </div>
                   )}
-                  {doc.late_submission_days && doc.late_submission_days > 0 && (
+                  {doc.late_submission_days && typeof doc.late_submission_days === 'number' && doc.late_submission_days > 0 && (
                     <div className="text-xs text-orange-600">
                       Late by {doc.late_submission_days} day{doc.late_submission_days > 1 ? 's' : ''}
                     </div>
                   )}
-                  {doc.fsg_submission_id && (
+                  {doc.fsg_submission_id && doc.fsg_submission_id !== "00" && doc.fsg_submission_id.trim() !== "" && (
                     <div className="text-xs text-muted-foreground">
                       FSG ID: {doc.fsg_submission_id}
                     </div>
@@ -598,7 +729,34 @@ const Documents = () => {
                           className="touch-target text-xs sm:text-sm"
                           onClick={(e) => {
                             e.stopPropagation();
-                            setPreviewFile({ url: doc.file_url, name: doc.title });
+                            // Extract filename with extension from URL for proper preview
+                            const extractFileName = (url: string, fallback: string): string => {
+                              try {
+                                if (url.startsWith('http')) {
+                                  const urlObj = new URL(url);
+                                  const pathParts = urlObj.pathname.split('/').filter(p => p);
+                                  const lastPart = pathParts[pathParts.length - 1];
+                                  if (lastPart && lastPart.includes('.')) {
+                                    return decodeURIComponent(lastPart.split('?')[0]);
+                                  }
+                                } else {
+                                  const pathParts = url.split('/').filter(p => p);
+                                  const lastPart = pathParts[pathParts.length - 1];
+                                  if (lastPart && lastPart.includes('.')) {
+                                    return lastPart;
+                                  }
+                                }
+                              } catch (e) {
+                                const parts = url.split('/');
+                                const lastPart = parts[parts.length - 1];
+                                if (lastPart && lastPart.includes('.')) {
+                                  return decodeURIComponent(lastPart.split('?')[0]);
+                                }
+                              }
+                              return fallback;
+                            };
+                            const fileNameWithExt = extractFileName(doc.file_url, doc.title);
+                            setPreviewFile({ url: doc.file_url, name: fileNameWithExt });
                             setPreviewOpen(true);
                           }}
                         >
@@ -618,6 +776,36 @@ const Documents = () => {
                           <Download className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
                           <span className="hidden sm:inline">Download</span>
                           <span className="sm:hidden">DL</span>
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          className="touch-target text-xs sm:text-sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedDocumentForDetails(doc);
+                            setShowComments(true);
+                          }}
+                          title="Comments"
+                        >
+                          <MessageSquare className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                          <span className="hidden sm:inline">Comments</span>
+                          <span className="sm:hidden">Cmt</span>
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          className="touch-target text-xs sm:text-sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedDocumentForDetails(doc);
+                            setShowVersionHistory(true);
+                          }}
+                          title="Version History"
+                        >
+                          <History className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                          <span className="hidden sm:inline">Versions</span>
+                          <span className="sm:hidden">Ver</span>
                         </Button>
                         <Button 
                           size="sm" 

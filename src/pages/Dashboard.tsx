@@ -1,25 +1,18 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo, memo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
+import { DashboardWidgets } from "@/components/DashboardWidgets";
 import { CheckSquare, FileText, Users, AlertCircle, Clock, CheckCircle2, TrendingUp, Calendar as CalendarIcon } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
 import { useQuery } from "@tanstack/react-query";
 import { Task, ChartData } from "@/types";
 
 const Dashboard = () => {
-  const [stats, setStats] = useState({
-    totalTasks: 0,
-    completedTasks: 0,
-    pendingDocs: 0,
-    teamMembers: 0,
-  });
-  const [recentTasks, setRecentTasks] = useState<Task[]>([]);
-  const [tasksByStatus, setTasksByStatus] = useState<ChartData[]>([]);
-  const [tasksByPriority, setTasksByPriority] = useState<ChartData[]>([]);
+  // Add data-tour attribute for onboarding
 
   // Fetch tasks data
   const { data: tasks, isLoading: tasksLoading } = useQuery({
@@ -76,47 +69,52 @@ const Dashboard = () => {
     staleTime: 30000,
   });
 
-  // Calculate stats and charts
-  useEffect(() => {
-    if (tasks && documents && members) {
-      const completedCount = tasks.filter(t => t.status === "completed").length;
-
-      setStats({
-        totalTasks: tasks.length,
-        completedTasks: completedCount,
-        pendingDocs: documents.filter(d => !d.is_approved).length,
-        teamMembers: members.length,
-      });
-
-      // Calculate task distribution
-      const statusCounts: Record<string, number> = {};
-      const priorityCounts: Record<string, number> = {};
-      
-      tasks.forEach(task => {
-        statusCounts[task.status] = (statusCounts[task.status] || 0) + 1;
-        priorityCounts[task.priority] = (priorityCounts[task.priority] || 0) + 1;
-      });
-
-      setTasksByStatus(
-        Object.entries(statusCounts).map(([name, value]) => ({ name: name.replace("_", " "), value }))
-      );
-      setTasksByPriority(
-        Object.entries(priorityCounts).map(([name, value]) => ({ name, value }))
-      );
+  // Calculate stats and charts with useMemo for performance
+  const stats = useMemo(() => {
+    if (!tasks || !documents || !members) {
+      return { totalTasks: 0, completedTasks: 0, pendingDocs: 0, teamMembers: 0 };
     }
+    const completedCount = tasks.filter(t => t.status === "completed").length;
+    return {
+      totalTasks: tasks.length,
+      completedTasks: completedCount,
+      pendingDocs: documents.filter(d => !d.is_approved).length,
+      teamMembers: members.length,
+    };
   }, [tasks, documents, members]);
 
-  useEffect(() => {
-    if (recentTasksData) {
-      setRecentTasks(recentTasksData as Task[]);
-    }
+  const tasksByStatus = useMemo(() => {
+    if (!tasks) return [];
+    const statusCounts: Record<string, number> = {};
+    tasks.forEach(task => {
+      statusCounts[task.status] = (statusCounts[task.status] || 0) + 1;
+    });
+    return Object.entries(statusCounts).map(([name, value]) => ({ 
+      name: name.replace("_", " "), 
+      value 
+    }));
+  }, [tasks]);
+
+  const tasksByPriority = useMemo(() => {
+    if (!tasks) return [];
+    const priorityCounts: Record<string, number> = {};
+    tasks.forEach(task => {
+      priorityCounts[task.priority] = (priorityCounts[task.priority] || 0) + 1;
+    });
+    return Object.entries(priorityCounts).map(([name, value]) => ({ name, value }));
+  }, [tasks]);
+
+  const recentTasks = useMemo(() => {
+    return (recentTasksData as Task[]) || [];
   }, [recentTasksData]);
 
   const isLoading = tasksLoading || docsLoading || membersLoading || recentLoading;
 
-  const completionRate = stats.totalTasks > 0 
-    ? Math.round((stats.completedTasks / stats.totalTasks) * 100) 
-    : 0;
+  const completionRate = useMemo(() => {
+    return stats.totalTasks > 0 
+      ? Math.round((stats.completedTasks / stats.totalTasks) * 100) 
+      : 0;
+  }, [stats]);
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -157,17 +155,21 @@ const Dashboard = () => {
 
   return (
     <DashboardLayout>
-      <div className="space-y-4 sm:space-y-6 lg:space-y-8">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold mb-2">Dashboard</h1>
-          <p className="text-sm sm:text-base text-muted-foreground">
-            Welcome back! Here's an overview of your team's progress.
-          </p>
-        </div>
+      <div data-tour="dashboard" className="container mx-auto p-4 sm:p-6 space-y-4 sm:space-y-6">
+        <DashboardWidgets />
+        
+        {/* Legacy Dashboard Content (can be removed if using widgets only) */}
+        <div className="space-y-4 sm:space-y-6 lg:space-y-8">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-bold mb-2">Dashboard Overview</h1>
+            <p className="text-sm sm:text-base text-muted-foreground">
+              Welcome back! Here's an overview of your team's progress.
+            </p>
+          </div>
 
-        {/* Stats Grid */}
+          {/* Stats Grid */}
         <div className="grid gap-3 sm:gap-4 grid-cols-2 md:grid-cols-2 lg:grid-cols-4">
-          <Card className="shadow-card hover:shadow-hover transition-shadow">
+          <Card className="shadow-card hover:shadow-hover transition-shadow mobile-card">
             <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
               <CardTitle className="text-xs sm:text-sm font-medium">Total Tasks</CardTitle>
               <CheckSquare className="h-4 w-4 text-muted-foreground" />
@@ -180,39 +182,39 @@ const Dashboard = () => {
             </CardContent>
           </Card>
 
-          <Card className="shadow-card hover:shadow-hover transition-shadow">
+          <Card className="shadow-card hover:shadow-hover transition-shadow mobile-card">
             <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-              <CardTitle className="text-sm font-medium">Completion Rate</CardTitle>
-              <Progress value={completionRate} className="w-16 h-2" />
+              <CardTitle className="text-xs sm:text-sm font-medium">Completion Rate</CardTitle>
+              <Progress value={completionRate} className="w-12 sm:w-16 h-2" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{completionRate}%</div>
+              <div className="text-xl sm:text-2xl font-bold">{completionRate}%</div>
               <p className="text-xs text-muted-foreground mt-1">
                 Task completion progress
               </p>
             </CardContent>
           </Card>
 
-          <Card className="shadow-card hover:shadow-hover transition-shadow">
+          <Card className="shadow-card hover:shadow-hover transition-shadow mobile-card">
             <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-              <CardTitle className="text-sm font-medium">Pending Documents</CardTitle>
+              <CardTitle className="text-xs sm:text-sm font-medium">Pending Documents</CardTitle>
               <FileText className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats.pendingDocs}</div>
+              <div className="text-xl sm:text-2xl font-bold">{stats.pendingDocs}</div>
               <p className="text-xs text-muted-foreground mt-1">
                 Awaiting approval
               </p>
             </CardContent>
           </Card>
 
-          <Card className="shadow-card hover:shadow-hover transition-shadow">
+          <Card className="shadow-card hover:shadow-hover transition-shadow mobile-card">
             <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-              <CardTitle className="text-sm font-medium">Team Members</CardTitle>
+              <CardTitle className="text-xs sm:text-sm font-medium">Team Members</CardTitle>
               <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats.teamMembers}</div>
+              <div className="text-xl sm:text-2xl font-bold">{stats.teamMembers}</div>
               <p className="text-xs text-muted-foreground mt-1">
                 Active members
               </p>
@@ -342,6 +344,7 @@ const Dashboard = () => {
             </Card>
           </div>
         )}
+        </div>
       </div>
     </DashboardLayout>
   );

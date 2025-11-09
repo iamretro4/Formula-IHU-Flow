@@ -176,4 +176,118 @@ All colors MUST be HSL.
     -webkit-touch-callout: none;
     user-select: none;
   }
+
+  /* Safe area insets for notched devices */
+  .safe-top {
+    padding-top: env(safe-area-inset-top);
+  }
+
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .safe-left {
+    padding-left: env(safe-area-inset-left);
+  }
+
+  .safe-right {
+    padding-right: env(safe-area-inset-right);
+  }
+
+  /* Mobile-optimized scroll behavior */
+  .mobile-smooth-scroll {
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+  }
+
+  /* Hide scrollbar on mobile but keep functionality */
+  .mobile-scrollbar-hidden {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .mobile-scrollbar-hidden::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Touch feedback */
+  .touch-feedback {
+    -webkit-tap-highlight-color: rgba(0, 0, 0, 0.1);
+    transition: background-color 0.2s;
+  }
+
+  .touch-feedback:active {
+    background-color: rgba(0, 0, 0, 0.05);
+  }
+
+  /* Mobile card optimizations */
+  .mobile-card {
+    @apply rounded-lg shadow-sm border border-border;
+    @apply touch-target;
+    @apply transition-all duration-200;
+  }
+
+  .mobile-card:active {
+    @apply scale-[0.98] shadow-md;
+  }
+
+  /* Mobile button optimizations */
+  .mobile-button {
+    @apply touch-target;
+    @apply min-h-[44px] px-4;
+    @apply font-medium;
+    @apply active:scale-95;
+    @apply transition-transform duration-150;
+  }
+
+  /* Mobile input optimizations */
+  .mobile-input {
+    @apply touch-target;
+    @apply min-h-[44px];
+    @apply text-base; /* Prevents zoom on iOS */
+  }
+
+  /* Mobile table wrapper */
+  .mobile-table-wrapper {
+    @apply overflow-x-auto;
+    @apply -mx-4 sm:mx-0;
+    @apply mobile-smooth-scroll;
+    @apply mobile-scrollbar-hidden;
+  }
+
+  .mobile-table-wrapper > * {
+    @apply px-4 sm:px-0;
+  }
+
+  /* Thin scrollbar for better visibility */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    height: 8px;
+    width: 8px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--border));
+    border-radius: 4px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background-color: hsl(var(--muted-foreground));
+  }
+
+  .scrollbar-thumb-border::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--border));
+  }
+
+  .scrollbar-track-transparent::-webkit-scrollbar-track {
+    background: transparent;
+  }
 }

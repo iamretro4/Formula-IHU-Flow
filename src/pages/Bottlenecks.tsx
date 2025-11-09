@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
@@ -47,7 +47,6 @@ type Bottleneck = {
 
 const Bottlenecks = () => {
   const [bottlenecks, setBottlenecks] = useState<Bottleneck[]>([]);
-  const [filteredBottlenecks, setFilteredBottlenecks] = useState<Bottleneck[]>([]);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
   const [severityFilter, setSeverityFilter] = useState<string>("all");
@@ -82,7 +81,8 @@ const Bottlenecks = () => {
     }
   }, [user]);
 
-  useEffect(() => {
+  // Memoize filtered bottlenecks for performance
+  const filteredBottlenecks = useMemo(() => {
     let filtered = bottlenecks;
 
     if (severityFilter !== "all") {
@@ -99,7 +99,7 @@ const Bottlenecks = () => {
       filtered = filtered.filter((b) => b.is_resolved);
     }
 
-    setFilteredBottlenecks(filtered);
+    return filtered;
   }, [bottlenecks, severityFilter, typeFilter, resolvedFilter]);
 
   const fetchBottlenecks = async () => {
@@ -115,7 +115,6 @@ const Bottlenecks = () => {
 
       if (error) throw error;
       setBottlenecks(data || []);
-      setFilteredBottlenecks(data || []);
     } catch (error: any) {
       toast({
         variant: "destructive",

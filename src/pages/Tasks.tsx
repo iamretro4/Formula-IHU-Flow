@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
@@ -7,14 +7,21 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Calendar, User, AlertCircle, Search, Trash2 } from "lucide-react";
+import { Plus, Calendar, User, AlertCircle, Search, Trash2, MessageSquare, Clock, LayoutGrid, List } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useMobileGestures } from "@/hooks/useMobileGestures";
+import { TaskCardSkeleton, ListSkeleton } from "@/components/LoadingSkeletons";
 import { Input } from "@/components/ui/input";
 import { TaskDialog } from "@/components/TaskDialog";
 import { BulkOperations } from "@/components/BulkOperations";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DeleteConfirmationDialog } from "@/components/DeleteConfirmationDialog";
 import { useDeleteTask } from "@/hooks/useTasks";
+import { KanbanBoard } from "@/components/KanbanBoard";
+import { CommentsSection } from "@/components/CommentsSection";
+import { TimeTrackingWithAnalytics } from "@/components/TimeTracking";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { usePagination } from "@/hooks/usePagination";
 import { PaginationControls } from "@/components/PaginationControls";
 import { exportTasksToCSV } from "@/utils/export";
@@ -40,7 +47,6 @@ type Task = {
 
 const Tasks = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [filteredTasks, setFilteredTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -52,9 +58,40 @@ const Tasks = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
   const [itemsPerPage, setItemsPerPage] = useState(20);
+  const [viewMode, setViewMode] = useState<"list" | "kanban">("list");
+  const [selectedTaskForDetails, setSelectedTaskForDetails] = useState<Task | null>(null);
+  const [showComments, setShowComments] = useState(false);
+  const [showTimeTracking, setShowTimeTracking] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
   const deleteTask = useDeleteTask();
+  
+  // Memoize filtered tasks for performance - must be before usePagination
+  const filteredTasks = useMemo(() => {
+    let filtered = tasks;
+
+    // Search filter
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(
+        (task) =>
+          task.title.toLowerCase().includes(query) ||
+          (task.description && task.description.toLowerCase().includes(query))
+      );
+    }
+
+    // Status filter
+    if (statusFilter !== "all") {
+      filtered = filtered.filter((task) => task.status === statusFilter);
+    }
+
+    // Priority filter
+    if (priorityFilter !== "all") {
+      filtered = filtered.filter((task) => task.priority === priorityFilter);
+    }
+
+    return filtered;
+  }, [tasks, searchQuery, statusFilter, priorityFilter]);
   
   const {
     paginatedData: paginatedTasks,
@@ -129,7 +166,6 @@ const Tasks = () => {
       }));
 
       setTasks(tasksWithProfiles);
-      setFilteredTasks(tasksWithProfiles);
     } catch (error: any) {
       toast({
         variant: "destructive",
@@ -141,32 +177,7 @@ const Tasks = () => {
     }
   };
 
-  useEffect(() => {
-    let filtered = tasks;
-
-    // Search filter
-    if (searchQuery) {
-      filtered = filtered.filter(
-        (task) =>
-          task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          (task.description && task.description.toLowerCase().includes(searchQuery.toLowerCase()))
-      );
-    }
-
-    // Status filter
-    if (statusFilter !== "all") {
-      filtered = filtered.filter((task) => task.status === statusFilter);
-    }
-
-    // Priority filter
-    if (priorityFilter !== "all") {
-      filtered = filtered.filter((task) => task.priority === priorityFilter);
-    }
-
-    setFilteredTasks(filtered);
-  }, [tasks, searchQuery, statusFilter, priorityFilter]);
-
-  const handleBulkAction = async (action: string, taskIds: string[]) => {
+  const handleBulkAction = useCallback(async (action: string, taskIds: string[]) => {
     try {
       if (action === "complete") {
         const { error } = await supabase
@@ -191,9 +202,9 @@ const Tasks = () => {
     } catch (error: any) {
       throw error;
     }
-  };
+  }, []);
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = useCallback((status: string) => {
     const colors: Record<string, string> = {
       pending: "bg-muted text-muted-foreground",
       in_progress: "bg-accent/20 text-accent-foreground",
@@ -202,9 +213,9 @@ const Tasks = () => {
       blocked: "bg-destructive/20 text-destructive-foreground",
     };
     return colors[status] || colors.pending;
-  };
+  }, []);
 
-  const getPriorityColor = (priority: string) => {
+  const getPriorityColor = useCallback((priority: string) => {
     const colors: Record<string, string> = {
       low: "border-muted-foreground/30",
       medium: "border-accent",
@@ -212,7 +223,7 @@ const Tasks = () => {
       critical: "border-destructive",
     };
     return colors[priority] || colors.medium;
-  };
+  }, []);
 
   const handleDeleteClick = (task: Task, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -229,9 +240,19 @@ const Tasks = () => {
     }
   };
 
+  // Mobile gestures for view switching
+  const swipeHandlers = useMobileGestures(undefined, {
+    onSwipeLeft: () => {
+      if (viewMode === "list") setViewMode("kanban");
+    },
+    onSwipeRight: () => {
+      if (viewMode === "kanban") setViewMode("list");
+    },
+  });
+
   return (
     <DashboardLayout>
-      <div className="container mx-auto p-4 sm:p-6 space-y-4 sm:space-y-6">
+      <div {...swipeHandlers} className="container mx-auto p-4 sm:p-6 space-y-4 sm:space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold">Task Management</h1>
@@ -289,6 +310,24 @@ const Tasks = () => {
               <SelectItem value="critical">Critical</SelectItem>
             </SelectContent>
           </Select>
+          <div className="flex gap-2">
+            <Button
+              variant={viewMode === "list" ? "default" : "outline"}
+              size="icon"
+              onClick={() => setViewMode("list")}
+              title="List View"
+            >
+              <List className="h-4 w-4" />
+            </Button>
+            <Button
+              variant={viewMode === "kanban" ? "default" : "outline"}
+              size="icon"
+              onClick={() => setViewMode("kanban")}
+              title="Kanban View"
+            >
+              <LayoutGrid className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
 
         <TaskDialog
@@ -307,6 +346,32 @@ const Tasks = () => {
           itemName={taskToDelete?.title}
           isLoading={deleteTask.isPending}
         />
+
+        {selectedTaskForDetails && (
+          <>
+            <Dialog open={showComments} onOpenChange={setShowComments}>
+              <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>Comments - {selectedTaskForDetails.title}</DialogTitle>
+                </DialogHeader>
+                <CommentsSection entityType="task" entityId={selectedTaskForDetails.id} />
+              </DialogContent>
+            </Dialog>
+
+            <Dialog open={showTimeTracking} onOpenChange={setShowTimeTracking}>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Time Tracking - {selectedTaskForDetails.title}</DialogTitle>
+                </DialogHeader>
+                <TimeTrackingWithAnalytics 
+                  entityType="task" 
+                  entityId={selectedTaskForDetails.id} 
+                  entityTitle={selectedTaskForDetails.title} 
+                />
+              </DialogContent>
+            </Dialog>
+          </>
+        )}
 
         {loading ? (
           <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
@@ -351,7 +416,11 @@ const Tasks = () => {
           </Card>
         ) : (
           <div className="space-y-4">
-            <BulkOperations
+            {viewMode === "kanban" ? (
+              <KanbanBoard onTaskUpdate={fetchTasks} />
+            ) : (
+              <>
+                <BulkOperations
               items={filteredTasks}
               selectedItems={selectedTasks}
               onSelectionChange={setSelectedTasks}
@@ -362,6 +431,11 @@ const Tasks = () => {
                 { label: "Delete", value: "delete", variant: "destructive" },
               ]}
             />
+            {filteredTasks.length > 50 ? (
+              <div className="text-sm text-muted-foreground p-4 text-center">
+                Showing {paginatedTasks.length} of {filteredTasks.length} tasks. Use pagination to view more.
+              </div>
+            ) : null}
             <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
               {paginatedTasks.map((task) => (
                 <Card 
@@ -416,30 +490,61 @@ const Tasks = () => {
                         <Badge variant="outline" className="text-xs">
                           {task.priority}
                         </Badge>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-                          onClick={(e) => handleDeleteClick(task, e)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        <div className="flex gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedTaskForDetails(task);
+                              setShowComments(true);
+                            }}
+                            title="Comments"
+                          >
+                            <MessageSquare className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedTaskForDetails(task);
+                              setShowTimeTracking(true);
+                            }}
+                            title="Time Tracking"
+                          >
+                            <Clock className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                            onClick={(e) => handleDeleteClick(task, e)}
+                            title="Delete"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </div>
                     </CardContent>
                   </div>
                 </div>
               </Card>
             ))}
-            </div>
-            
-            <PaginationControls
-              currentPage={currentPage}
-              totalPages={totalPages}
-              onPageChange={goToPage}
-              itemsPerPage={itemsPerPage}
-              onItemsPerPageChange={setItemsPerPage}
-              totalItems={filteredTasks.length}
-            />
+                </div>
+                
+                <PaginationControls
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  onPageChange={goToPage}
+                  itemsPerPage={itemsPerPage}
+                  onItemsPerPageChange={setItemsPerPage}
+                  totalItems={filteredTasks.length}
+                />
+              </>
+            )}
           </div>
         )}
       </div>

@@ -126,7 +126,10 @@ export function DocumentDialog({ open, onOpenChange, onSuccess, document }: Docu
         // Create new document
         const { error } = await supabase
           .from("documents")
-          .insert([docData]);
+          .insert([{
+            ...docData,
+            file_url: file_url, // Include file URL when creating
+          }]);
 
         if (error) throw error;
         toast({ title: "Document uploaded successfully" });

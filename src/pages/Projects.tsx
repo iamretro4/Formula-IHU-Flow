@@ -12,6 +12,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ProjectDialog } from "@/components/ProjectDialog";
 import { MilestoneDialog } from "@/components/MilestoneDialog";
 import { ProjectTasksView } from "@/components/ProjectTasksView";
+import { CommentsSection } from "@/components/CommentsSection";
+import { TaskDependenciesGraph } from "@/components/TaskDependenciesGraph";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DeleteConfirmationDialog } from "@/components/DeleteConfirmationDialog";
 import { useDeleteProject } from "@/hooks/useProjects";
 import { usePagination } from "@/hooks/usePagination";
@@ -49,6 +53,9 @@ const Projects = () => {
   const [projectDialogOpen, setProjectDialogOpen] = useState(false);
   const [milestoneDialogOpen, setMilestoneDialogOpen] = useState(false);
   const [selectedProject, setSelectedProject] = useState<Project | undefined>(undefined);
+  const [selectedProjectForDetails, setSelectedProjectForDetails] = useState<Project | null>(null);
+  const [showComments, setShowComments] = useState(false);
+  const [showDependencies, setShowDependencies] = useState(false);
   const [selectedProjectForMilestone, setSelectedProjectForMilestone] = useState<string>("");
   const [selectedMilestone, setSelectedMilestone] = useState<Milestone | undefined>(undefined);
   const [expandedProject, setExpandedProject] = useState<string | null>(null);
@@ -301,21 +308,26 @@ const Projects = () => {
 
   return (
     <DashboardLayout>
-      <div className="container mx-auto p-6 space-y-6">
-        <div className="flex items-center justify-between">
+      <div className="container mx-auto p-4 sm:p-6 space-y-4 sm:space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold">Projects & Milestones</h1>
-            <p className="text-muted-foreground">Track project progress and timelines</p>
+            <h1 className="text-2xl sm:text-3xl font-bold">Projects & Milestones</h1>
+            <p className="text-sm sm:text-base text-muted-foreground">Track project progress and timelines</p>
           </div>
           <div className="flex gap-2">
             <Button 
               variant="outline"
               onClick={handleExport}
+              className="touch-target w-full sm:w-auto"
             >
               <Download className="mr-2 h-4 w-4" />
-              Export CSV
+              <span className="hidden sm:inline">Export CSV</span>
+              <span className="sm:hidden">Export</span>
             </Button>
-            <Button onClick={() => { setSelectedProject(undefined); setProjectDialogOpen(true); }}>
+            <Button 
+              onClick={() => { setSelectedProject(undefined); setProjectDialogOpen(true); }}
+              className="touch-target w-full sm:w-auto"
+            >
               <Plus className="mr-2 h-4 w-4" />
               New Project
             </Button>
@@ -410,16 +422,17 @@ const Projects = () => {
                 const daysUntilEnd = getDaysUntilDate(project.end_date);
 
                 return (
-                  <Card key={project.id} className="shadow-card">
-                  <CardHeader>
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-start justify-between mb-2">
-                          <CardTitle className="text-2xl">{project.name}</CardTitle>
-                          <div className="flex gap-1">
+                  <Card key={project.id} className="shadow-card mobile-card">
+                  <CardHeader className="p-4 sm:p-6">
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between mb-2 gap-2">
+                          <CardTitle className="text-xl sm:text-2xl break-words">{project.name}</CardTitle>
+                          <div className="flex gap-1 flex-shrink-0">
                             <Button 
                               variant="ghost" 
                               size="icon"
+                              className="touch-target"
                               onClick={() => { setSelectedProject(project); setProjectDialogOpen(true); }}
                             >
                               <Edit className="h-4 w-4" />
@@ -427,14 +440,14 @@ const Projects = () => {
                             <Button 
                               variant="ghost" 
                               size="icon"
-                              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                              className="text-destructive hover:text-destructive hover:bg-destructive/10 touch-target"
                               onClick={(e) => handleDeleteClick(project, e)}
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
                           </div>
                         </div>
-                        <CardDescription className="text-base">
+                        <CardDescription className="text-sm sm:text-base break-words">
                           {project.description || "No description"}
                         </CardDescription>
                       </div>
@@ -443,9 +456,9 @@ const Projects = () => {
                       </Badge>
                     </div>
                   </CardHeader>
-                  <CardContent className="space-y-6">
+                  <CardContent className="space-y-4 sm:space-y-6 p-4 sm:p-6 pt-0">
                     {/* Project Timeline */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
                       <div className="flex items-center gap-3">
                         <Calendar className="h-5 w-5 text-muted-foreground" />
                         <div>
@@ -496,6 +509,7 @@ const Projects = () => {
                         <Button 
                           size="sm" 
                           variant="outline"
+                          className="touch-target"
                           onClick={() => {
                             setSelectedProjectForMilestone(project.id);
                             setSelectedMilestone(undefined);
@@ -511,7 +525,7 @@ const Projects = () => {
                           {projectMilestones.map((milestone) => (
                             <div
                               key={milestone.id}
-                              className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors cursor-pointer"
+                              className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors cursor-pointer touch-feedback mobile-card"
                               onClick={() => toggleMilestoneComplete(milestone.id, milestone.is_completed)}
                             >
                               <div className={`flex-shrink-0 ${milestone.is_completed ? 'text-success' : 'text-muted-foreground'}`}>
@@ -545,7 +559,7 @@ const Projects = () => {
                       <Button
                         variant="outline"
                         size="sm"
-                        className="w-full"
+                        className="w-full touch-target"
                         onClick={() => setExpandedProject(expandedProject === project.id ? null : project.id)}
                       >
                         {expandedProject === project.id ? "Hide" : "Show"} Tasks
