@@ -1,3 +1,6 @@
+// CRITICAL: Preload React-dependent libraries first
+import "@/lib/preload-react-libs";
+
 import * as React from "react";
 import * as RechartsPrimitive from "recharts";
 
