@@ -2,6 +2,38 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
+import type { Plugin } from "vite";
+
+// Plugin to ensure React vendor chunk is preloaded first in HTML
+function reactVendorPreload(): Plugin {
+  return {
+    name: "react-vendor-preload",
+    transformIndexHtml(html, ctx) {
+      if (!ctx || !ctx.bundle) return html;
+      
+      // Find react-vendor chunk in bundle
+      const reactVendorChunk = Object.values(ctx.bundle).find(
+        (chunk) => chunk.type === "chunk" && chunk.name === "react-vendor"
+      );
+      
+      if (reactVendorChunk && reactVendorChunk.type === "chunk") {
+        const reactVendorPath = reactVendorChunk.fileName;
+        // Remove any existing react-vendor modulepreload and add it first
+        // This ensures React loads before other vendor chunks
+        html = html.replace(
+          new RegExp(`<link rel="modulepreload"[^>]*href="/${reactVendorPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"[^>]*>`, 'g'),
+          ''
+        );
+        // Add react-vendor modulepreload right after the entry script
+        return html.replace(
+          /(<script type="module"[^>]*src="[^"]*index-[^"]*\.js"[^>]*><\/script>)/,
+          `$1\n    <link rel="modulepreload" crossorigin href="/${reactVendorPath}" />`
+        );
+      }
+      return html;
+    },
+  };
+}
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
@@ -9,7 +41,11 @@ export default defineConfig(({ mode }) => ({
     host: "::",
     port: 8000,
   },
-  plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
+  plugins: [
+    react(),
+    reactVendorPreload(),
+    mode === "development" && componentTagger()
+  ].filter(Boolean),
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
@@ -38,14 +74,15 @@ export default defineConfig(({ mode }) => ({
               (id.includes('/react-dom/client') && id.includes('node_modules')) ||
               (id.includes('\\react-dom\\client') && id.includes('node_modules'));
             
-            // Include React in entry chunk to ensure it's always available
+            // Put React in dedicated chunk that loads first
             // This prevents "forwardRef" and "Children" undefined errors
+            // The reactVendorPreload plugin ensures this chunk is preloaded
             if (isReact) {
-              return undefined; // Include in entry chunk
+              return 'react-vendor';
             }
-            // React Router depends on React - also include in entry
+            // React Router depends on React - include in react-vendor
             if (id.includes('react-router')) {
-              return undefined; // Include in entry chunk
+              return 'react-vendor';
             }
             // Radix UI components - put in separate chunk but ensure React is loaded first
             if (id.includes('@radix-ui')) {
