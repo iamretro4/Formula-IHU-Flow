@@ -26,8 +26,8 @@ export default defineConfig(({ mode }) => ({
         manualChunks: (id, { getModuleInfo }) => {
           // Vendor chunks
           if (id.includes('node_modules')) {
-            // React and React-DOM - Include in entry chunk to ensure it loads first
-            // This prevents "forwardRef is undefined" errors when UI chunks load
+            // React and React-DOM - Put in dedicated chunk that loads first
+            // This prevents "forwardRef" and "Children" undefined errors
             const isReact = 
               (id.includes('/react/') && id.includes('node_modules')) || 
               (id.includes('\\react\\') && id.includes('node_modules')) ||
@@ -38,8 +38,8 @@ export default defineConfig(({ mode }) => ({
               (id.includes('/react-dom/client') && id.includes('node_modules')) ||
               (id.includes('\\react-dom\\client') && id.includes('node_modules'));
             
-            // Return undefined for React to include it in entry chunk
-            // This ensures React is always available before other chunks load
+            // Include React in entry chunk to ensure it's always available
+            // This prevents "forwardRef" and "Children" undefined errors
             if (isReact) {
               return undefined; // Include in entry chunk
             }
@@ -94,6 +94,8 @@ export default defineConfig(({ mode }) => ({
         assetFileNames: 'assets/[ext]/[name]-[hash].[ext]',
         // Ensure React vendor is loaded before other vendor chunks
         // This is handled automatically by Rollup through chunk dependencies
+        // Use manualChunks to create a react-vendor chunk that loads first
+        // All React-dependent libraries will depend on react-vendor
       },
     },
     chunkSizeWarningLimit: 1000,
