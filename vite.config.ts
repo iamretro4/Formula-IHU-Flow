@@ -26,29 +26,42 @@ export default defineConfig(({ mode }) => ({
       output: {
         // Ensure proper chunk loading order
         // React vendor will be loaded before UI vendor due to dependencies
-        // DRASTIC SOLUTION: Put React back in entry chunk to ensure it's always available
-        // This ensures React is always available before any library code executes
+        // COMPLETELY DIFFERENT APPROACH: Put React in separate chunk that loads FIRST
+        // This ensures React is fully loaded before entry chunk executes
         manualChunks: (id, { getModuleInfo }) => {
-          // Only create separate chunks for very large, non-React libraries
           if (id.includes('node_modules')) {
-            // CRITICAL: Put React in entry chunk (undefined) to ensure it loads with entry
-            // This guarantees React is available before any other code executes
-            // Don't put React in separate chunk - it must be in entry chunk
+            // React MUST be in separate chunk that loads first
+            const isReact = 
+              (id.includes('/react/') && id.includes('node_modules')) || 
+              (id.includes('\\react\\') && id.includes('node_modules')) ||
+              (id.includes('/react-dom/') && id.includes('node_modules')) || 
+              (id.includes('\\react-dom\\') && id.includes('node_modules')) ||
+              (id.includes('/react/jsx-runtime') && id.includes('node_modules')) ||
+              (id.includes('\\react\\jsx-runtime') && id.includes('node_modules')) ||
+              (id.includes('/react-dom/client') && id.includes('node_modules')) ||
+              (id.includes('\\react-dom\\client') && id.includes('node_modules'));
+            
+            if (isReact) {
+              return 'react-vendor'; // Separate chunk that loads first
+            }
+            
+            // React Router depends on React
+            if (id.includes('react-router')) {
+              return 'react-vendor';
+            }
             
             // Only very large, non-React libraries get separate chunks
-            // Everything else (including React) goes to entry chunk where React is available
             if (id.includes('pdfjs-dist')) {
-              return 'pdf'; // Very large, non-React
+              return 'pdf';
             }
             if (id.includes('jspdf') || id.includes('xlsx')) {
-              return 'export'; // Large, non-React
+              return 'export';
             }
             if (id.includes('d3-gantt') || id.includes('vis-network')) {
-              return 'gantt'; // Large, non-React
+              return 'gantt';
             }
             
-            // EVERYTHING ELSE (including React) goes to entry chunk (undefined = entry chunk)
-            // This ensures React is available before any library code executes
+            // Everything else goes to entry chunk
             return undefined;
           }
         },

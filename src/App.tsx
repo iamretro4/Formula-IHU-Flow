@@ -1,6 +1,3 @@
-// CRITICAL: Import react-init first to ensure React is globally available
-// This ensures React-dependent libraries can access React APIs
-import "./react-init";
 
 import { lazy, Suspense } from "react";
 import { Toaster } from "@/components/ui/toaster";
