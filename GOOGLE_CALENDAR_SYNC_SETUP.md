@@ -21,9 +21,13 @@ This guide will help you set up Google Calendar synchronization for your applica
    - Go to "APIs & Services" > "Credentials"
    - Click "Create Credentials" > "OAuth client ID"
    - Choose "Web application"
-   - Add authorized redirect URIs:
-     - `https://YOUR_SUPABASE_PROJECT.supabase.co/functions/v1/google-calendar-oauth`
-     - For local development: `http://localhost:54321/functions/v1/google-calendar-oauth`
+   - **Authorised JavaScript origins** (add these):
+     - `http://localhost:8000` (for local development)
+     - `https://hirifbecooazbevauffq.supabase.co` (for production)
+     - Add your production domain if you have a custom domain deployed
+   - **Authorised redirect URIs** (add these):
+     - `https://hirifbecooazbevauffq.supabase.co/functions/v1/google-calendar-oauth` (production)
+     - `http://localhost:54321/functions/v1/google-calendar-oauth` (local development, if using local Supabase)
    - Save and note your **Client ID** and **Client Secret**
 
 ## Step 2: Configure Supabase Environment Variables

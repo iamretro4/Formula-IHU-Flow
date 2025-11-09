@@ -49,7 +49,15 @@ The Edge Function needs these environment variables:
 2. Create/select a project
 3. Enable "Google Calendar API"
 4. Go to "Credentials" > "Create Credentials" > "OAuth client ID"
-5. Add authorized redirect URI: `https://YOUR_PROJECT_REF.supabase.co/functions/v1/google-calendar-oauth`
+5. Choose "Web application"
+6. **Authorised JavaScript origins** (add these):
+   - `http://localhost:8000` (for local development)
+   - `https://hirifbecooazbevauffq.supabase.co` (for production)
+   - Add your production domain if you have one deployed
+7. **Authorised redirect URIs** (add these):
+   - `https://hirifbecooazbevauffq.supabase.co/functions/v1/google-calendar-oauth` (production)
+   - `http://localhost:54321/functions/v1/google-calendar-oauth` (local development, if using local Supabase)
+8. Save and note your **Client ID** and **Client Secret**
 
 ### Step 4: Test the Function
 
@@ -93,10 +101,10 @@ You can test the function manually using curl:
 
 ```bash
 # Get your access token from the app (check browser Network tab)
-# Replace YOUR_ACCESS_TOKEN and YOUR_PROJECT_REF
+# Replace YOUR_ACCESS_TOKEN with your actual access token
 
 curl -X POST \
-  'https://YOUR_PROJECT_REF.supabase.co/functions/v1/google-calendar-oauth' \
+  'https://hirifbecooazbevauffq.supabase.co/functions/v1/google-calendar-oauth' \
   -H 'Authorization: Bearer YOUR_ACCESS_TOKEN' \
   -H 'Content-Type: application/json' \
   -d '{"action": "initiate"}'

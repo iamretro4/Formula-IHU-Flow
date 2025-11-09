@@ -75,7 +75,9 @@ serve(async (req) => {
       // Exchange code for tokens
       const clientId = Deno.env.get("GOOGLE_CLIENT_ID");
       const clientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET");
-      const redirectUri = `${Deno.env.get("SUPABASE_URL")}/functions/v1/google-calendar-oauth`;
+      const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+      const baseUrl = supabaseUrl.replace(/\/rest\/v1$/, "").replace(/\/$/, "");
+      const redirectUri = `${baseUrl}/functions/v1/google-calendar-oauth`;
 
       const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
         method: "POST",
@@ -184,9 +186,15 @@ serve(async (req) => {
         );
       }
 
-      const redirectUri = `${supabaseUrl}/functions/v1/google-calendar-oauth`;
+      // Clean up SUPABASE_URL - remove /rest/v1 if present
+      const baseUrl = supabaseUrl.replace(/\/rest\/v1$/, "").replace(/\/$/, "");
+      const redirectUri = `${baseUrl}/functions/v1/google-calendar-oauth`;
       const scope = "https://www.googleapis.com/auth/calendar";
       const stateParam = crypto.randomUUID();
+
+      // Log for debugging (remove in production if needed)
+      console.log("OAuth redirect URI:", redirectUri);
+      console.log("Client ID configured:", !!clientId);
 
       const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scope)}&access_type=offline&prompt=consent&state=${stateParam}`;
 

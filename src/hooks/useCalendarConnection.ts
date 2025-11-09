@@ -54,6 +54,12 @@ export const useInitiateGoogleCalendar = () => {
 
         if (error) {
           console.error("Edge Function error:", error);
+          // Check for specific error types
+          if (error.message?.includes("Function not found") || error.message?.includes("404")) {
+            throw new Error(
+              "Edge Function 'google-calendar-oauth' is not deployed. Please deploy it in Supabase Dashboard > Edge Functions. See DEPLOY_EDGE_FUNCTION.md for instructions."
+            );
+          }
           throw new Error(error.message || "Failed to invoke Edge Function");
         }
 
