@@ -8,8 +8,8 @@ import type { Plugin } from "vite";
 const chunksNeedingReact = new Set<string>();
 const processedModules = new Set<string>();
 
-// Plugin to patch final bundled chunks to use global React
-// This fixes the "React.Children is undefined" error by patching after bundling
+// Plugin to patch final bundled chunks to use global React.Children
+// This works with the HTML stub to ensure React.Children is always available
 function ensureReactGlobal(): Plugin {
   return {
     name: "ensure-react-global",
@@ -18,10 +18,8 @@ function ensureReactGlobal(): Plugin {
       processedModules.clear();
     },
     // Use renderChunk to patch the final bundled code (after minification)
-    // This is more reliable than transform because it works on the final output
     renderChunk(code, chunk, options) {
       // Only patch chunks that contain recharts or @dnd-kit
-      // Check by filename (most reliable after bundling)
       const fileName = chunk.fileName || '';
       const isChartVendor = fileName.includes('chart-vendor');
       const isKanban = fileName.includes('kanban');
@@ -30,82 +28,44 @@ function ensureReactGlobal(): Plugin {
         return null;
       }
       
+      // Check if code references React.Children
+      if (!code.includes('Children')) {
+        return null;
+      }
+      
       let patchedCode = code;
       let modified = false;
       
-      // First, add a safety check at the very beginning of the chunk
-      // This ensures React.Children is available before any code executes
-      // Use an IIFE that runs immediately and waits for React if needed
-      const safetyCheck = `
-(function() {
-  'use strict';
-  // Wait for React to be available if it's not yet ready
-  var getReact = function() {
-    if (typeof window !== 'undefined' && window.React && window.React.Children) {
-      return window.React;
-    }
-    if (typeof globalThis !== 'undefined' && globalThis.React && globalThis.React.Children) {
-      return globalThis.React;
-    }
-    // If React is not available, try to get it from __REACT_CHILDREN__
-    if (typeof window !== 'undefined' && window.__REACT_CHILDREN__) {
-      // Create a minimal React object with Children
-      return { Children: window.__REACT_CHILDREN__ };
-    }
-    return null;
-  };
-  
-  var React = getReact();
-  if (!React && typeof window !== 'undefined' && window.__REACT_READY__) {
-    // Wait for React to be ready (this should be very fast)
-    window.__REACT_READY__.then(function(r) {
-      if (r && r.Children && typeof window !== 'undefined') {
-        window.__REACT_CHILDREN__ = r.Children;
-      }
-    }).catch(function() {});
-  }
-  
-  // Make React.Children available as a fallback
-  if (React && React.Children && typeof window !== 'undefined') {
-    window.__REACT_CHILDREN__ = React.Children;
-  }
-})();
-`;
+      // Create a unique marker to prevent recursive replacements
+      // Use a static marker that won't appear in the actual code
+      const marker = '__REACT_CHILDREN_SAFE_MARKER_XYZ123__';
       
-      // Always add safety check for chart-vendor and kanban chunks
-      // Check if we need to patch - look for Children references
-      if (code.includes('Children') || isChartVendor || isKanban) {
-        // Patch the original code FIRST (before adding safety check)
-        // Create a unique marker to prevent recursive replacements
-        const marker = '__REACT_CHILDREN_SAFE_MARKER__';
-        let originalCode = code;
-        
-        // First, replace with a marker to avoid recursive replacements
-        originalCode = originalCode.replace(
-          /React\.Children/g,
-          marker + '_DOT_Children'
-        );
-        
-        originalCode = originalCode.replace(
-          /React\["Children"\]/g,
-          marker + '_BRACKET_Children'
-        );
-        
-        originalCode = originalCode.replace(
-          /React\['Children'\]/g,
-          marker + '_SQUOTE_Children'
-        );
-        
-        // Now replace the marker with the safe accessor (only once)
-        const safeAccessor = `((typeof window !== 'undefined' && window.React && window.React.Children) || (typeof window !== 'undefined' && window.__REACT_CHILDREN__) || (typeof React !== 'undefined' && React.Children) || (() => { throw new Error('React.Children is not available'); })())`;
-        originalCode = originalCode.replace(new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '_DOT_Children', 'g'), safeAccessor);
-        originalCode = originalCode.replace(new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '_BRACKET_Children', 'g'), safeAccessor);
-        originalCode = originalCode.replace(new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '_SQUOTE_Children', 'g'), safeAccessor);
-        
-        // Now add safety check at the beginning of the patched code
-        patchedCode = safetyCheck + originalCode;
-        modified = true;
-      }
+      // Step 1: Replace all React.Children references with markers
+      patchedCode = patchedCode.replace(
+        /React\.Children/g,
+        marker + '_DOT'
+      );
+      
+      patchedCode = patchedCode.replace(
+        /React\["Children"\]/g,
+        marker + '_BRACKET'
+      );
+      
+      patchedCode = patchedCode.replace(
+        /React\['Children'\]/g,
+        marker + '_SQUOTE'
+      );
+      
+      // Step 2: Replace markers with safe accessor that uses the HTML stub
+      // The stub in index.html ensures window.React.Children is always available
+      const safeAccessor = `(typeof window !== 'undefined' && window.React && window.React.Children ? window.React.Children : (typeof window !== 'undefined' && window.__REACT_CHILDREN__ ? window.__REACT_CHILDREN__ : (typeof React !== 'undefined' && React.Children ? React.Children : (() => { throw new Error('React.Children is not available'); })())))`;
+      
+      const escapedMarker = marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      patchedCode = patchedCode.replace(new RegExp(escapedMarker + '_DOT', 'g'), safeAccessor);
+      patchedCode = patchedCode.replace(new RegExp(escapedMarker + '_BRACKET', 'g'), safeAccessor);
+      patchedCode = patchedCode.replace(new RegExp(escapedMarker + '_SQUOTE', 'g'), safeAccessor);
+      
+      modified = true;
       
       if (modified) {
         return {
@@ -119,52 +79,8 @@ function ensureReactGlobal(): Plugin {
   };
 }
 
-// Plugin to inject React setup script into HTML and ensure proper loading
-function injectReactSetup(): Plugin {
-  return {
-    name: "inject-react-setup",
-    transformIndexHtml(html) {
-      // Inject a script that ensures React is available before any modules load
-      // This script will run synchronously before the entry module
-      const reactSetupScript = `
-    <script>
-      // Ensure React is available globally before any chunks execute
-      // This prevents "React.Children is undefined" errors in async chunks
-      (function() {
-        if (typeof window !== 'undefined') {
-          // Create a promise that resolves when React is available
-          var reactResolver = null;
-          window.__REACT_READY__ = new Promise(function(resolve) {
-            reactResolver = resolve;
-            // Check immediately
-            if (window.React && window.React.Children) {
-              resolve(window.React);
-            } else {
-              // Poll until React is available
-              var checkReact = function() {
-                if (window.React && window.React.Children) {
-                  resolve(window.React);
-                } else {
-                  setTimeout(checkReact, 10);
-                }
-              };
-              checkReact();
-            }
-          });
-          // Store resolver for react-init.ts to use
-          (window as any).__REACT_RESOLVER__ = reactResolver;
-        }
-      })();
-    </script>
-`;
-      // Insert before the module script
-      return html.replace(
-        /<script type="module" src="([^"]+)"><\/script>/,
-        reactSetupScript + '\n    <script type="module" src="$1"></script>'
-      );
-    },
-  };
-}
+// Plugin removed - we now use the stub in index.html directly
+// This was causing conflicts with the HTML stub approach
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
@@ -175,7 +91,6 @@ export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
     ensureReactGlobal(),
-    injectReactSetup(),
     mode === "development" && componentTagger()
   ].filter(Boolean),
   resolve: {
