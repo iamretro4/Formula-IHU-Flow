@@ -5,40 +5,51 @@ import { componentTagger } from "lovable-tagger";
 import type { Plugin } from "vite";
 
 // DRASTIC SOLUTION: Plugin to ensure React is ready before entry chunk executes
-// This wraps the entry chunk code to wait for React if needed
+// This wraps ALL chunks (not just entry) to wait for React if needed
 function ensureReactReadyPlugin(): Plugin {
   return {
     name: 'ensure-react-ready',
     enforce: 'post',
     generateBundle(options, bundle) {
-      // Find the entry chunk
-      const entryChunk = Object.values(bundle).find(
-        chunk => chunk.type === 'chunk' && chunk.isEntry
-      );
-      
-      if (entryChunk && entryChunk.type === 'chunk') {
-        // Wrap the entry chunk code to ensure React is ready
-        // The HTML stub should already provide React, but this is a safety net
-        const reactCheck = `
-// Ensure React is available before executing entry code
+      // Process ALL chunks to ensure React is ready before they execute
+      Object.values(bundle).forEach(chunk => {
+        if (chunk.type === 'chunk') {
+          // Skip react-init chunk - it sets up React
+          if (chunk.fileName.includes('react-init') || chunk.modules && Object.keys(chunk.modules).some(id => id.includes('react-init'))) {
+            return;
+          }
+          
+          // Wrap chunk code to ensure React is ready - BLOCKING version
+          const reactCheck = `
+// CRITICAL: Block execution until React is fully initialized
 (function() {
-  if (typeof window !== 'undefined' && (!window.React || !window.React.useLayoutEffect)) {
-    // React not ready yet - wait for it
-    var checkReact = setInterval(function() {
-      if (window.React && window.React.useLayoutEffect) {
-        clearInterval(checkReact);
-        // React is ready, continue with entry code
+  if (typeof window !== 'undefined') {
+    var react = window.React;
+    // Synchronously wait for React to be ready (blocking)
+    var maxIterations = 100000; // Prevent infinite loop
+    var i = 0;
+    while ((!react || !react.useLayoutEffect || !react.useMemo || !react.useState) && i < maxIterations) {
+      react = window.React;
+      i++;
+      // Small delay to allow other code to execute
+      if (i % 1000 === 0) {
+        // Yield to event loop every 1000 iterations
+        var start = Date.now();
+        while (Date.now() - start < 1) {
+          // Busy wait for 1ms
+        }
       }
-    }, 1);
-    // Timeout after 5 seconds
-    setTimeout(function() {
-      clearInterval(checkReact);
-    }, 5000);
+    }
+    if (i >= maxIterations) {
+      console.error('CRITICAL: React not ready after', maxIterations, 'iterations');
+      throw new Error('React initialization timeout');
+    }
   }
 })();
 `;
-        entryChunk.code = reactCheck + entryChunk.code;
-      }
+          chunk.code = reactCheck + chunk.code;
+        }
+      });
     },
   };
 }

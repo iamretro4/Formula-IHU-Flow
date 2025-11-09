@@ -159,9 +159,6 @@
         }
       })();
     </script>
-    <!-- CRITICAL: Preload react-vendor chunk to ensure React loads first -->
-    <!-- This ensures React is fully initialized before entry chunk executes -->
-    <link rel="modulepreload" href="/src/react-init.ts" />
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
