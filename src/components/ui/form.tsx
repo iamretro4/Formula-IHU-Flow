@@ -1,3 +1,4 @@
+// Ensure React is available before importing react-hook-form
 import * as React from "react";
 import * as LabelPrimitive from "@radix-ui/react-label";
 import { Slot } from "@radix-ui/react-slot";
