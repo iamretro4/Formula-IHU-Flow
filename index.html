@@ -23,6 +23,66 @@
 
   <body>
     <div id="root"></div>
+    <script>
+      // CRITICAL: Ensure React.Children is available before any modules load
+      // This prevents "React.Children is undefined" errors in async chunks
+      (function() {
+        // Monitor for React to be set and ensure Children is always available
+        var ensureReactChildren = function() {
+          if (window.React && typeof window.React === 'object' && !Array.isArray(window.React)) {
+            if (window.React.Children) {
+              // Cache it
+              window.__REACT_CHILDREN__ = window.React.Children;
+              return true;
+            } else if (window.__REACT_CHILDREN__) {
+              // Set Children from the cached version if React exists but Children is missing
+              try {
+                Object.defineProperty(window.React, 'Children', {
+                  value: window.__REACT_CHILDREN__,
+                  writable: true,
+                  configurable: true,
+                  enumerable: true
+                });
+                return true;
+              } catch (e) {
+                try {
+                  window.React.Children = window.__REACT_CHILDREN__;
+                  return true;
+                } catch (e2) {
+                  return false;
+                }
+              }
+            }
+          }
+          return false;
+        };
+        
+        // Check immediately
+        ensureReactChildren();
+        
+        // Monitor for React to be set (runs before modules load)
+        var checkInterval = setInterval(function() {
+          if (ensureReactChildren()) {
+            clearInterval(checkInterval);
+          }
+        }, 5);
+        
+        // Clear interval after 2 seconds to avoid infinite checking
+        setTimeout(function() {
+          clearInterval(checkInterval);
+        }, 2000);
+        
+        // Also hook into Object.defineProperty to catch when React is set
+        var originalDefineProperty = Object.defineProperty;
+        Object.defineProperty = function(obj, prop, descriptor) {
+          var result = originalDefineProperty.apply(this, arguments);
+          if (prop === 'React' && obj === window) {
+            setTimeout(ensureReactChildren, 0);
+          }
+          return result;
+        };
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
