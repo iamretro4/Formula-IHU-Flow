@@ -135,6 +135,8 @@ export default defineConfig(({ mode }) => ({
         assetFileNames: 'assets/[ext]/[name]-[hash].[ext]',
         // Ensure react-vendor chunk loads before other vendor chunks
         // This is handled by making other chunks depend on react-vendor
+        // Also ensure entry chunk loads before vendor chunk
+        // This ensures React is initialized before vendor code executes
       },
     },
     chunkSizeWarningLimit: 1000,

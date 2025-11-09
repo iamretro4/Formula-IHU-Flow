@@ -71,7 +71,7 @@
           forwardRef: function(render) {
             // Stub for forwardRef - return a component that uses the render function
             if (typeof render === 'function') {
-              return function ForwardRefComponent(props: any, ref: any) {
+              return function ForwardRefComponent(props, ref) {
                 return render(props, ref);
               };
             }
