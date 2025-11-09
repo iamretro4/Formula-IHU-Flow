@@ -23,7 +23,11 @@ export default defineConfig(({ mode }) => ({
         manualChunks: (id) => {
           // Vendor chunks
           if (id.includes('node_modules')) {
-            if (id.includes('react') || id.includes('react-dom') || id.includes('react-router')) {
+            // Ensure React and React-DOM are always together and loaded first
+            if (id.includes('react/') || id.includes('react-dom/') || id.includes('react\\') || id.includes('react-dom\\')) {
+              return 'react-vendor';
+            }
+            if (id.includes('react-router')) {
               return 'react-vendor';
             }
             if (id.includes('@radix-ui')) {
@@ -74,11 +78,17 @@ export default defineConfig(({ mode }) => ({
     target: 'esnext',
     minify: 'esbuild',
     reportCompressedSize: false, // Faster builds
+    commonjsOptions: {
+      include: [/node_modules/],
+      transformMixedEsModules: true,
+    },
   },
   optimizeDeps: {
     include: [
       "react",
+      "react/jsx-runtime",
       "react-dom",
+      "react-dom/client",
       "react-router-dom",
       "@tanstack/react-query",
       "@supabase/supabase-js",
@@ -88,5 +98,6 @@ export default defineConfig(({ mode }) => ({
       sourcemap: false,
       target: 'esnext',
     },
+    force: false, // Set to true if you need to force re-optimization
   },
 }));
