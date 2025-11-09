@@ -76,14 +76,15 @@ export default defineConfig(({ mode }) => ({
             if (id.includes('d3') && !id.includes('d3-gantt')) {
               return 'chart-vendor';
             }
+            // React-dependent libraries - load with entry to ensure React is ready
             if (id.includes('react-hook-form') || id.includes('@hookform') || id.includes('zod')) {
-              return 'form-vendor';
+              return undefined; // Include in entry chunk so React loads first
             }
             if (id.includes('@tanstack/react-query')) {
-              return 'query-vendor';
+              return undefined; // Include in entry chunk so React loads first
             }
             if (id.includes('@supabase')) {
-              return 'supabase-vendor';
+              return 'supabase-vendor'; // Keep separate as it's large
             }
             // @dnd-kit - don't put in separate chunk, let it load dynamically
             // This prevents it from being bundled until actually needed
@@ -106,7 +107,23 @@ export default defineConfig(({ mode }) => ({
             if (id.includes('date-fns')) {
               return 'date-utils';
             }
-            // Default vendor chunk for other node_modules
+            // CRITICAL: Don't put React-dependent libraries in vendor chunk
+            // Check if it's a React-dependent library and put in entry instead
+            const isReactDependent = 
+              id.includes('react') || 
+              id.includes('@tanstack') ||
+              id.includes('react-hook-form') ||
+              id.includes('@hookform') ||
+              id.includes('zustand') ||
+              id.includes('jotai') ||
+              id.includes('recoil') ||
+              id.includes('valtio');
+            
+            if (isReactDependent) {
+              return undefined; // Include in entry chunk so React loads first
+            }
+            
+            // Default vendor chunk for other node_modules (non-React libraries)
             return 'vendor';
           }
         },
