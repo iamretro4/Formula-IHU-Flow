@@ -1,4 +1,4 @@
-// This module ensures React is available globally
+// This module ensures React is available globally AND initialized
 // Import this FIRST in main.tsx
 import * as React from "react";
 import * as ReactDOM from "react-dom";
@@ -17,6 +17,32 @@ if (typeof window !== "undefined") {
   }
   if (typeof self !== 'undefined') {
     (self as any).React = React;
+  }
+  
+  // CRITICAL: Initialize React's dispatcher by creating a temporary root
+  // This ensures React's internal state is ready before any hooks are called
+  try {
+    const tempContainer = document.createElement('div');
+    tempContainer.style.display = 'none';
+    tempContainer.id = '__react_init_temp__';
+    document.body.appendChild(tempContainer);
+    
+    const { createRoot } = ReactDOM;
+    const tempRoot = createRoot(tempContainer);
+    
+    // Render a minimal component to initialize React's dispatcher
+    tempRoot.render(React.createElement('div', null));
+    
+    // Immediately unmount and remove - we just needed to initialize React
+    setTimeout(() => {
+      tempRoot.unmount();
+      if (tempContainer.parentNode) {
+        tempContainer.parentNode.removeChild(tempContainer);
+      }
+    }, 0);
+  } catch (e) {
+    // If initialization fails, continue anyway
+    console.warn('React dispatcher initialization failed:', e);
   }
 }
 
