@@ -1,5 +1,8 @@
 import { Button, ButtonProps } from "@/components/ui/button";
-import { forwardRef } from "react";
+// CRITICAL: Use React from global scope if available (set by react-init), otherwise use module
+import * as ReactModule from "react";
+const React = (typeof window !== 'undefined' && (window as any).React) || ReactModule;
+const forwardRef = React.forwardRef;
 
 export const AccessibleButton = forwardRef<HTMLButtonElement, ButtonProps>(
   ({ children, ...props }, ref) => {

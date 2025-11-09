@@ -3,24 +3,39 @@
 import * as React from "react";
 import * as ReactDOM from "react-dom";
 
-// CRITICAL: Replace the stub with the real React.Children
-// This runs synchronously after the HTML script creates the stub
+// CRITICAL: Replace the stub with the real React immediately and synchronously
+// This MUST happen before any other module code executes
 if (typeof window !== "undefined") {
-  // Set React immediately using the setter from HTML script
+  // Set React immediately - this is synchronous and blocks until complete
+  const reactModule = React;
+  const reactDOMModule = ReactDOM;
+  
+  // Force set React on all global scopes immediately
   try {
     // Use the setter (created by HTML script) to replace the stub
-    (window as any).React = React;
+    (window as any).React = reactModule;
   } catch (e) {
     // If setter fails, try direct assignment
     try {
-      Object.assign((window as any).React, React);
+      Object.assign((window as any).React, reactModule);
     } catch (e2) {
       // If that fails, just set it directly (might overwrite getter/setter)
-      (window as any).React = React;
+      (window as any).React = reactModule;
     }
   }
   
-  (window as any).ReactDOM = ReactDOM;
+  // Also set on all other global scopes immediately
+  if (typeof globalThis !== 'undefined') {
+    (globalThis as any).React = reactModule;
+  }
+  if (typeof global !== 'undefined') {
+    (global as any).React = reactModule;
+  }
+  if (typeof self !== 'undefined') {
+    (self as any).React = reactModule;
+  }
+  
+  (window as any).ReactDOM = reactDOMModule;
   
   // Replace the stub with the real React.Children
   if (React && React.Children) {
@@ -64,4 +79,5 @@ if (typeof window !== "undefined") {
 export { React, ReactDOM };
 export * from "react";
 export * from "react-dom";
+
 
