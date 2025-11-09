@@ -24,33 +24,55 @@
   <body>
     <div id="root"></div>
     <script>
-      // COMPLETELY DIFFERENT APPROACH: Ensure React.Children exists as a truthy object
-      // This must run before any module code, including prepended safety checks
+      // CRITICAL: Create a complete React.Children stub BEFORE any chunks load
+      // This must execute synchronously before any module code
       (function() {
+        'use strict';
+        
         // Initialize React object if it doesn't exist
         if (!window.React) {
           window.React = {};
         }
         
-        // Initialize Children as a truthy object (not null/undefined)
-        // This prevents "can't access property" errors
-        if (!window.React.Children || window.React.Children === null) {
-          window.React.Children = { __stub: true };
-        }
+        // Create a complete stub with all React.Children methods
+        // This prevents "can't access property" errors when chunks execute
+        var createStub = function() {
+          return {
+            map: function() { return []; },
+            forEach: function() { },
+            count: function() { return 0; },
+            only: function() { return null; },
+            toArray: function() { return []; }
+          };
+        };
         
-        // Ensure it's always truthy and accessible
+        var stub = createStub();
+        
+        // Set the stub immediately
+        window.React.Children = stub;
+        window.__REACT_CHILDREN__ = stub;
+        
+        // Create a getter/setter that always returns a valid object
         Object.defineProperty(window.React, 'Children', {
           get: function() {
-            // Return the real Children if available, otherwise return stub
-            return this.__realChildren || window.__REACT_CHILDREN__ || { __stub: true };
+            // Always return something valid - prefer real, fallback to stub
+            return this.__realChildren || window.__REACT_CHILDREN__ || stub;
           },
           set: function(value) {
+            // Store the real Children when it becomes available
             this.__realChildren = value;
             window.__REACT_CHILDREN__ = value;
+            // Also set directly for immediate access
+            if (value && typeof value === 'object') {
+              Object.assign(stub, value);
+            }
           },
           configurable: true,
           enumerable: true
         });
+        
+        // Ensure it's set on the object directly too
+        window.React.Children = stub;
       })();
     </script>
     <script type="module" src="/src/main.tsx"></script>
