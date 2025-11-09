@@ -8,17 +8,30 @@ import * as ReactDOM from "react-dom";
 if (typeof window !== "undefined") {
   // Set React immediately - this is critical
   // Replace the placeholder with the real React
-  const existingReact = (window as any).React;
   (window as any).React = React;
   (window as any).ReactDOM = ReactDOM;
   
-  // Ensure React.Children is explicitly available
-  // This is critical for libraries that access it directly
+  // CRITICAL: Ensure React.Children is explicitly set and accessible
+  // This must happen immediately and cannot fail
   if (React && React.Children) {
+    // Set it multiple ways to ensure it's always available
     (window as any).React.Children = React.Children;
     (window as any).__REACT_CHILDREN__ = React.Children;
     
-    // Also ensure it's not null/undefined (replace placeholder if needed)
+    // Force set it again to override any getters
+    try {
+      Object.defineProperty((window as any).React, 'Children', {
+        value: React.Children,
+        writable: true,
+        configurable: true,
+        enumerable: true
+      });
+    } catch (e) {
+      // If defineProperty fails, the direct assignment above should work
+      (window as any).React.Children = React.Children;
+    }
+    
+    // Double-check it's set
     if (!(window as any).React.Children) {
       (window as any).React.Children = React.Children;
     }
