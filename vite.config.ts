@@ -8,13 +8,35 @@ import type { Plugin } from "vite";
 const chunksNeedingReact = new Set<string>();
 const processedModules = new Set<string>();
 
-// Plugin to track which chunks need React
+// Plugin to patch recharts and @dnd-kit to use global React
+// This fixes the "React.Children is undefined" error
 function ensureReactGlobal(): Plugin {
   return {
     name: "ensure-react-global",
     buildStart() {
       chunksNeedingReact.clear();
       processedModules.clear();
+    },
+    transform(code, id) {
+      // Patch recharts and @dnd-kit modules that use React.Children
+      if ((id.includes('recharts') || id.includes('@dnd-kit')) && 
+          id.includes('node_modules') && 
+          code.includes('React.Children')) {
+        // Patch React.Children access to use global React if local React.Children is undefined
+        // This ensures React.Children is available even if React hasn't fully initialized
+        const patchedCode = code.replace(
+          /React\.Children/g,
+          `(typeof window !== 'undefined' && window.React && window.React.Children ? window.React.Children : React.Children)`
+        );
+        
+        if (patchedCode !== code) {
+          return {
+            code: patchedCode,
+            map: null,
+          };
+        }
+      }
+      return null;
     },
   };
 }
