@@ -68,7 +68,15 @@
           createElement: function() { return null; },
           cloneElement: function() { return null; },
           createContext: function() { return { Provider: {}, Consumer: {} }; },
-          forwardRef: function() { return function() {}; },
+          forwardRef: function(render) {
+            // Stub for forwardRef - return a component that uses the render function
+            if (typeof render === 'function') {
+              return function ForwardRefComponent(props: any, ref: any) {
+                return render(props, ref);
+              };
+            }
+            return function() {};
+          },
           memo: function() { return function() {}; },
           lazy: function() { return function() {}; },
           useCallback: function() { return function() {}; },

@@ -56,9 +56,9 @@ export default defineConfig(({ mode }) => ({
               return 'react-vendor'; // Put React in its own chunk that loads first
             }
             
-            // React Router depends on React - also include in entry
+            // React Router depends on React - put in react-vendor to ensure React loads first
             if (id.includes('react-router')) {
-              return undefined; // Include in entry chunk
+              return 'react-vendor'; // Include with React to ensure proper load order
             }
             
             // Radix UI - don't put in separate chunk, let it load with entry
