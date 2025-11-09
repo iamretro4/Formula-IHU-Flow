@@ -1,5 +1,6 @@
 import * as React from "react";
-import { useRecharts } from "@/lib/dynamic-recharts";
+import * as RechartsPrimitive from "recharts";
+
 import { cn } from "@/lib/utils";
 
 // Format: { THEME_NAME: CSS_SELECTOR }
@@ -32,10 +33,9 @@ const ChartContainer = React.forwardRef<
   HTMLDivElement,
   React.ComponentProps<"div"> & {
     config: ChartConfig;
-    children: React.ReactNode;
+    children: React.ComponentProps<typeof RechartsPrimitive.ResponsiveContainer>["children"];
   }
 >(({ id, className, children, config, ...props }, ref) => {
-  const { ResponsiveContainer } = useRecharts();
   const uniqueId = React.useId();
   const chartId = `chart-${id || uniqueId.replace(/:/g, "")}`;
 
@@ -51,7 +51,7 @@ const ChartContainer = React.forwardRef<
         {...props}
       >
         <ChartStyle id={chartId} config={config} />
-        {ResponsiveContainer && <ResponsiveContainer>{children}</ResponsiveContainer>}
+        <RechartsPrimitive.ResponsiveContainer>{children}</RechartsPrimitive.ResponsiveContainer>
       </div>
     </ChartContext.Provider>
   );
@@ -87,14 +87,12 @@ ${colorConfig
   );
 };
 
-const ChartTooltip = (props: any) => {
-  const { Tooltip } = useRecharts();
-  return Tooltip ? <Tooltip {...props} /> : null;
-};
+const ChartTooltip = RechartsPrimitive.Tooltip;
 
 const ChartTooltipContent = React.forwardRef<
   HTMLDivElement,
-  any & {
+  React.ComponentProps<typeof RechartsPrimitive.Tooltip> &
+    React.ComponentProps<"div"> & {
       hideLabel?: boolean;
       hideIndicator?: boolean;
       indicator?: "line" | "dot" | "dashed";
@@ -227,16 +225,12 @@ const ChartTooltipContent = React.forwardRef<
 );
 ChartTooltipContent.displayName = "ChartTooltip";
 
-const ChartLegend = (props: any) => {
-  const { Legend } = useRecharts();
-  return Legend ? <Legend {...props} /> : null;
-};
+const ChartLegend = RechartsPrimitive.Legend;
 
 const ChartLegendContent = React.forwardRef<
   HTMLDivElement,
-  React.ComponentProps<"div"> & {
-      payload?: any;
-      verticalAlign?: "top" | "bottom";
+  React.ComponentProps<"div"> &
+    Pick<RechartsPrimitive.LegendProps, "payload" | "verticalAlign"> & {
       hideIcon?: boolean;
       nameKey?: string;
     }

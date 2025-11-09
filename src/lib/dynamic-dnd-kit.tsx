@@ -9,15 +9,8 @@ async function loadDndKit() {
   if (dndKitCache) return dndKitCache;
   if (loadingPromise) return loadingPromise;
   
-  // Ensure React.Children is available
-  if (typeof window !== "undefined") {
-    let attempts = 0;
-    while ((!window.React || !window.React.Children || typeof window.React.Children.map !== 'function') && attempts < 200) {
-      await new Promise(resolve => setTimeout(resolve, 10));
-      attempts++;
-    }
-  }
-  
+  // Just load @dnd-kit directly - no need to check for window.React
+  // React will be available when this runs because it's imported in the component
   loadingPromise = Promise.all([
     import("@dnd-kit/core"),
     import("@dnd-kit/sortable"),
