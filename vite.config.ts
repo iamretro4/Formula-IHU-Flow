@@ -8,8 +8,8 @@ import type { Plugin } from "vite";
 const chunksNeedingReact = new Set<string>();
 const processedModules = new Set<string>();
 
-// Plugin to patch recharts and @dnd-kit to use global React
-// This fixes the "React.Children is undefined" error
+// Plugin to patch final bundled chunks to use global React
+// This fixes the "React.Children is undefined" error by patching after bundling
 function ensureReactGlobal(): Plugin {
   return {
     name: "ensure-react-global",
@@ -17,75 +17,109 @@ function ensureReactGlobal(): Plugin {
       chunksNeedingReact.clear();
       processedModules.clear();
     },
-    transform(code, id) {
-      // Patch recharts and @dnd-kit modules that use React.Children
-      if ((id.includes('recharts') || id.includes('@dnd-kit')) && 
-          id.includes('node_modules')) {
-        // More comprehensive patching - handle React.Children access
-        let patchedCode = code;
-        let modified = false;
-        
-        // Patch React.Children access - ensure it always uses global React
-        // Match various patterns: React.Children, React["Children"], etc.
-        if (code.includes('React.Children') || code.includes('React["Children"]') || code.includes("React['Children']")) {
-          // Replace all forms of React.Children access
-          patchedCode = patchedCode.replace(
-            /React\.Children/g,
-            `((typeof window !== 'undefined' && window.React && window.React.Children) || (typeof React !== 'undefined' && React.Children) || (() => { throw new Error('React.Children is not available'); })())`
-          );
-          patchedCode = patchedCode.replace(
-            /React\["Children"\]/g,
-            `((typeof window !== 'undefined' && window.React && window.React["Children"]) || (typeof React !== 'undefined' && React["Children"]) || (() => { throw new Error('React.Children is not available'); })())`
-          );
-          patchedCode = patchedCode.replace(
-            /React\['Children'\]/g,
-            `((typeof window !== 'undefined' && window.React && window.React['Children']) || (typeof React !== 'undefined' && React['Children']) || (() => { throw new Error('React.Children is not available'); })())`
-          );
-          modified = true;
-        }
-        
-        // Also ensure React itself is available at the top of the module
-        // Add a safety check at the beginning if React is used
-        // This ensures React is available before any code in the module executes
-        if (code.includes('React.') && !patchedCode.includes('// React safety check')) {
-          // Prepend a safety check to ensure React is available
-          // Use a more robust approach that works with ES modules
-          const reactCheck = `
-// React safety check - ensure React.Children is available
-if (typeof window !== 'undefined' && window.React && window.React.Children) {
-  // Make React.Children available if React exists but Children is missing
-  if (typeof React !== 'undefined' && !React.Children) {
-    React.Children = window.React.Children;
+    // Use renderChunk to patch the final bundled code (after minification)
+    // This is more reliable than transform because it works on the final output
+    renderChunk(code, chunk, options) {
+      // Only patch chunks that contain recharts or @dnd-kit
+      // Check by filename (most reliable after bundling)
+      const fileName = chunk.fileName || '';
+      const isChartVendor = fileName.includes('chart-vendor');
+      const isKanban = fileName.includes('kanban');
+      
+      if (!isChartVendor && !isKanban) {
+        return null;
+      }
+      
+      let patchedCode = code;
+      let modified = false;
+      
+      // First, add a safety check at the very beginning of the chunk
+      // This ensures React.Children is available before any code executes
+      // Use an IIFE that runs immediately and waits for React if needed
+      const safetyCheck = `
+(function() {
+  'use strict';
+  // Wait for React to be available if it's not yet ready
+  var getReact = function() {
+    if (typeof window !== 'undefined' && window.React && window.React.Children) {
+      return window.React;
+    }
+    if (typeof globalThis !== 'undefined' && globalThis.React && globalThis.React.Children) {
+      return globalThis.React;
+    }
+    // If React is not available, try to get it from __REACT_CHILDREN__
+    if (typeof window !== 'undefined' && window.__REACT_CHILDREN__) {
+      // Create a minimal React object with Children
+      return { Children: window.__REACT_CHILDREN__ };
+    }
+    return null;
+  };
+  
+  var React = getReact();
+  if (!React && typeof window !== 'undefined' && window.__REACT_READY__) {
+    // Wait for React to be ready (this should be very fast)
+    window.__REACT_READY__.then(function(r) {
+      if (r && r.Children && typeof window !== 'undefined') {
+        window.__REACT_CHILDREN__ = r.Children;
+      }
+    }).catch(function() {});
   }
-}
+  
+  // Make React.Children available as a fallback
+  if (React && React.Children && typeof window !== 'undefined') {
+    window.__REACT_CHILDREN__ = React.Children;
+  }
+})();
 `;
-          patchedCode = reactCheck + patchedCode;
-          modified = true;
-        }
+      
+      // Always add safety check for chart-vendor and kanban chunks
+      // Check if we need to patch - look for Children references
+      if (code.includes('Children') || isChartVendor || isKanban) {
+        // Patch the original code FIRST (before adding safety check)
+        // Create a unique marker to prevent recursive replacements
+        const marker = '__REACT_CHILDREN_SAFE_MARKER__';
+        let originalCode = code;
         
-        if (modified) {
-          return {
-            code: patchedCode,
-            map: null,
-          };
-        }
+        // First, replace with a marker to avoid recursive replacements
+        originalCode = originalCode.replace(
+          /React\.Children/g,
+          marker + '_DOT_Children'
+        );
+        
+        originalCode = originalCode.replace(
+          /React\["Children"\]/g,
+          marker + '_BRACKET_Children'
+        );
+        
+        originalCode = originalCode.replace(
+          /React\['Children'\]/g,
+          marker + '_SQUOTE_Children'
+        );
+        
+        // Now replace the marker with the safe accessor (only once)
+        const safeAccessor = `((typeof window !== 'undefined' && window.React && window.React.Children) || (typeof window !== 'undefined' && window.__REACT_CHILDREN__) || (typeof React !== 'undefined' && React.Children) || (() => { throw new Error('React.Children is not available'); })())`;
+        originalCode = originalCode.replace(new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '_DOT_Children', 'g'), safeAccessor);
+        originalCode = originalCode.replace(new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '_BRACKET_Children', 'g'), safeAccessor);
+        originalCode = originalCode.replace(new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '_SQUOTE_Children', 'g'), safeAccessor);
+        
+        // Now add safety check at the beginning of the patched code
+        patchedCode = safetyCheck + originalCode;
+        modified = true;
       }
+      
+      if (modified) {
+        return {
+          code: patchedCode,
+          map: null, // Don't generate source maps for patched chunks
+        };
+      }
+      
       return null;
-    },
-    generateBundle(options, bundle) {
-      // Ensure React is available globally in the entry chunk
-      // This will be handled by react-init.ts, but we can add a safety check
-      for (const [fileName, chunk] of Object.entries(bundle)) {
-        if (chunk.type === 'chunk' && chunk.isEntry) {
-          // The entry chunk should already have react-init.ts
-          // which sets window.React
-        }
-      }
     },
   };
 }
 
-// Plugin to inject React setup script into HTML
+// Plugin to inject React setup script into HTML and ensure proper loading
 function injectReactSetup(): Plugin {
   return {
     name: "inject-react-setup",
@@ -97,10 +131,28 @@ function injectReactSetup(): Plugin {
       // Ensure React is available globally before any chunks execute
       // This prevents "React.Children is undefined" errors in async chunks
       (function() {
-        if (typeof window !== 'undefined' && !window.__REACT_SETUP__) {
-          window.__REACT_SETUP__ = true;
-          // This will be set by react-init.ts, but we ensure it's ready
-          // The entry chunk will set window.React when it loads
+        if (typeof window !== 'undefined') {
+          // Create a promise that resolves when React is available
+          var reactResolver = null;
+          window.__REACT_READY__ = new Promise(function(resolve) {
+            reactResolver = resolve;
+            // Check immediately
+            if (window.React && window.React.Children) {
+              resolve(window.React);
+            } else {
+              // Poll until React is available
+              var checkReact = function() {
+                if (window.React && window.React.Children) {
+                  resolve(window.React);
+                } else {
+                  setTimeout(checkReact, 10);
+                }
+              };
+              checkReact();
+            }
+          });
+          // Store resolver for react-init.ts to use
+          (window as any).__REACT_RESOLVER__ = reactResolver;
         }
       })();
     </script>
@@ -169,7 +221,7 @@ export default defineConfig(({ mode }) => ({
             }
             
             // Recharts and d3 - put in chart-vendor chunk
-            // These will depend on React from entry chunk
+            // Keep React in entry, but ensure chart-vendor can access it
             if (id.includes('recharts') || (id.includes('d3') && !id.includes('d3-gantt'))) {
               return 'chart-vendor';
             }
@@ -183,7 +235,7 @@ export default defineConfig(({ mode }) => ({
               return 'supabase-vendor';
             }
             // @dnd-kit - put in kanban chunk
-            // This will depend on React from entry chunk
+            // Keep React in entry, but ensure kanban can access it
             if (id.includes('@dnd-kit')) {
               return 'kanban';
             }
