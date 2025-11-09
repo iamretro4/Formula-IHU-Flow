@@ -24,40 +24,71 @@
   <body>
     <div id="root"></div>
     <script>
-      // CRITICAL: Pre-initialize React placeholder to prevent lexical declaration errors
+      // CRITICAL: Pre-initialize React placeholder with a valid Children object
       // This must happen before any module code executes, including prepended safety checks
       (function() {
         'use strict';
         
-        // Create a minimal React placeholder that won't cause initialization errors
+        // Create a minimal React placeholder with a stub Children object
         // This ensures the prepended code in chunks has something safe to access
         if (!window.React) {
-          window.React = {};
-        }
-        
-        // Set up a safe Children property that won't cause errors
-        if (!window.React.Children) {
+          // Create a stub Children object that won't cause errors when accessed
+          var stubChildren = {
+            map: function() { return []; },
+            forEach: function() {},
+            count: function() { return 0; },
+            only: function() { return null; },
+            toArray: function() { return []; }
+          };
+          
+          window.React = {
+            Children: stubChildren
+          };
+          
+          // Make it non-configurable to prevent issues
           try {
             Object.defineProperty(window.React, 'Children', {
-              value: null,
+              value: stubChildren,
               writable: true,
               configurable: true,
               enumerable: true
             });
           } catch (e) {
-            window.React.Children = null;
+            // If defineProperty fails, the assignment above should work
+          }
+        } else if (!window.React.Children) {
+          // If React exists but Children doesn't, add a stub
+          var stubChildren = {
+            map: function() { return []; },
+            forEach: function() {},
+            count: function() { return 0; },
+            only: function() { return null; },
+            toArray: function() { return []; }
+          };
+          
+          try {
+            Object.defineProperty(window.React, 'Children', {
+              value: stubChildren,
+              writable: true,
+              configurable: true,
+              enumerable: true
+            });
+          } catch (e) {
+            window.React.Children = stubChildren;
           }
         }
         
         // Cache for React.Children
-        window.__REACT_CHILDREN__ = null;
+        window.__REACT_CHILDREN__ = window.React.Children;
         
         // Function to safely update React when it becomes available
         var updateReact = function(react) {
           try {
-            if (react && react.Children) {
+            if (react && react.Children && react !== window.__REACT_PLACEHOLDER__) {
+              // Replace with real React
               window.React = react;
               window.__REACT_CHILDREN__ = react.Children;
+              
               // Ensure Children is set
               if (!window.React.Children) {
                 window.React.Children = react.Children;
@@ -70,11 +101,17 @@
           return false;
         };
         
-        // Monitor for React to be set
+        // Monitor for React to be set (check if it's the real React, not placeholder)
         var checkInterval = setInterval(function() {
-          if (window.React && window.React !== window.__REACT_PLACEHOLDER__) {
-            if (updateReact(window.React)) {
-              clearInterval(checkInterval);
+          var react = window.React;
+          if (react && react !== window.__REACT_PLACEHOLDER__) {
+            // Check if it has the real Children (not our stub)
+            if (react.Children && 
+                typeof react.Children.map === 'function' && 
+                react.Children !== window.__REACT_CHILDREN__) {
+              if (updateReact(react)) {
+                clearInterval(checkInterval);
+              }
             }
           }
         }, 5);
