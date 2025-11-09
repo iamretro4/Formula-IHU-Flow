@@ -1,15 +1,10 @@
-// CRITICAL: Preload React-dependent libraries first
-import "@/lib/preload-react-libs";
-
 import { useState, useEffect, useMemo, useCallback, memo, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Task } from "@/types";
-import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, closestCorners, useDroppable } from "@dnd-kit/core";
-import { SortableContext, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
+import { useDndKit } from "@/lib/dynamic-dnd-kit";
 import { GripVertical, Plus } from "lucide-react";
 import { TaskDialog } from "./TaskDialog";
 
@@ -26,6 +21,8 @@ type KanbanBoardProps = {
 };
 
 export function KanbanBoard({ projectId, onTaskUpdate }: KanbanBoardProps) {
+  const { dndKit, loading: dndLoading, DndContext, DragOverlay, SortableContext, useSortable, useDroppable, closestCorners, verticalListSortingStrategy, CSS } = useDndKit();
+  
   const [columns, setColumns] = useState<KanbanColumn[]>([
     { id: "pending", title: "Pending", status: "pending", tasks: [] },
     { id: "in_progress", title: "In Progress", status: "in_progress", tasks: [] },
@@ -93,11 +90,11 @@ export function KanbanBoard({ projectId, onTaskUpdate }: KanbanBoardProps) {
     );
   }, []);
 
-  const handleDragStart = useCallback((event: DragStartEvent) => {
+  const handleDragStart = useCallback((event: any) => {
     setActiveId(event.active.id as string);
   }, []);
 
-  const handleDragEnd = useCallback(async (event: DragEndEvent) => {
+  const handleDragEnd = useCallback(async (event: any) => {
     const { active, over } = event;
     if (!over) {
       setActiveId(null);
@@ -170,7 +167,7 @@ export function KanbanBoard({ projectId, onTaskUpdate }: KanbanBoardProps) {
     return tasks.find((t) => t.id === activeId);
   }, [tasks, activeId]);
 
-  if (loading) {
+  if (loading || dndLoading || !DndContext || !closestCorners) {
     return <div className="text-center p-8">Loading board...</div>;
   }
 
@@ -193,15 +190,17 @@ export function KanbanBoard({ projectId, onTaskUpdate }: KanbanBoardProps) {
         {/* Scroll indicator */}
         <div className="absolute right-0 top-0 bottom-4 w-8 bg-gradient-to-l from-background to-transparent pointer-events-none hidden sm:block" />
       </div>
-      <DragOverlay>
-        {activeTask ? (
-          <Card className="w-64 p-2 shadow-lg">
-            <p className="text-sm font-medium">
+      {DragOverlay && (
+        <DragOverlay>
+          {activeTask ? (
+            <Card className="w-64 p-2 shadow-lg">
+              <p className="text-sm font-medium">
               {activeTask.title}
             </p>
           </Card>
         ) : null}
-      </DragOverlay>
+        </DragOverlay>
+      )}
       {taskDialogOpen && selectedTask && (
         <TaskDialog
           open={taskDialogOpen}
@@ -225,15 +224,22 @@ const KanbanColumn = memo(function KanbanColumn({
   column: KanbanColumn;
   onTaskClick: (task: Task) => void;
 }) {
-  const { setNodeRef, isOver } = useDroppable({
+  const { useDroppable, SortableContext, verticalListSortingStrategy } = useDndKit();
+  
+  const droppableResult = useDroppable ? useDroppable({
     id: column.id,
-  });
+  }) : { setNodeRef: null, isOver: false };
 
+  const { setNodeRef, isOver } = droppableResult || { setNodeRef: null, isOver: false };
   const taskIds = useMemo(() => column.tasks.map((t) => t.id), [column.tasks]);
+
+  if (!SortableContext || !verticalListSortingStrategy) {
+    return <div>Loading...</div>;
+  }
 
   return (
     <div className="flex-shrink-0 w-64 sm:w-72 snap-start min-w-[256px] sm:min-w-[288px]">
-      <Card ref={setNodeRef} className={isOver ? "ring-2 ring-primary" : "h-full"}>
+      <Card ref={setNodeRef as any} className={isOver ? "ring-2 ring-primary" : "h-full"}>
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-medium flex items-center justify-between">
             <span>{column.title}</span>
@@ -253,15 +259,19 @@ const KanbanColumn = memo(function KanbanColumn({
 });
 
 const KanbanTask = memo(function KanbanTask({ task, onClick }: { task: Task; onClick: (task: Task) => void }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+  const { useSortable, CSS } = useDndKit();
+  
+  const sortableResult = useSortable ? useSortable({
     id: task.id,
-  });
+  }) : { attributes: {}, listeners: {}, setNodeRef: null, transform: null, transition: '', isDragging: false };
+
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = sortableResult || { attributes: {}, listeners: {}, setNodeRef: null, transform: null, transition: '', isDragging: false };
 
   const style = useMemo(() => ({
-    transform: CSS.Transform.toString(transform),
+    transform: CSS && transform ? CSS.Transform.toString(transform) : undefined,
     transition,
     opacity: isDragging ? 0.5 : 1,
-  }), [transform, transition, isDragging]);
+  }), [transform, transition, isDragging, CSS]);
 
   const formattedDate = useMemo(() => {
     return task.due_date ? new Date(task.due_date).toLocaleDateString() : null;

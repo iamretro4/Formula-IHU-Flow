@@ -1,6 +1,3 @@
-// CRITICAL: Preload React-dependent libraries first
-import "@/lib/preload-react-libs";
-
 import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -11,23 +8,7 @@ import { useProjects } from "@/hooks/useProjects";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  DragEndEvent,
-} from "@dnd-kit/core";
-import {
-  arrayMove,
-  SortableContext,
-  sortableKeyboardCoordinates,
-  useSortable,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
+import { useDndKit } from "@/lib/dynamic-dnd-kit";
 
 type WidgetType = "stats" | "tasks" | "documents" | "projects" | "chart";
 
@@ -46,18 +27,22 @@ const defaultWidgets: Widget[] = [
 ];
 
 export function DashboardWidgets() {
+  const { dndKit, loading: dndLoading, DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy, CSS } = useDndKit();
+  
   const [widgets, setWidgets] = useState<Widget[]>(defaultWidgets);
   const [isEditing, setIsEditing] = useState(false);
   const { data: tasks, isLoading: tasksLoading } = useTasks();
   const { data: documents, isLoading: docsLoading } = useDocuments();
   const { data: projects, isLoading: projectsLoading } = useProjects();
 
-  const sensors = useSensors(
-    useSensor(PointerSensor),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
-  );
+  const sensors = useSensors && useSensor && PointerSensor && KeyboardSensor && sortableKeyboardCoordinates
+    ? useSensors(
+        useSensor(PointerSensor),
+        useSensor(KeyboardSensor, {
+          coordinateGetter: sortableKeyboardCoordinates,
+        })
+      )
+    : null;
 
   useEffect(() => {
     const saved = localStorage.getItem("dashboardWidgets");
@@ -71,7 +56,8 @@ export function DashboardWidgets() {
     setIsEditing(false);
   };
 
-  const handleDragEnd = (event: DragEndEvent) => {
+  const handleDragEnd = (event: any) => {
+    if (!arrayMove) return;
     const { active, over } = event;
     if (over && active.id !== over.id) {
       setWidgets((items) => {
@@ -116,12 +102,13 @@ export function DashboardWidgets() {
         </div>
       </div>
 
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragEnd={handleDragEnd}
-      >
-        <SortableContext items={widgets.map((w) => w.id)} strategy={verticalListSortingStrategy}>
+      {!dndLoading && DndContext && closestCenter && SortableContext && verticalListSortingStrategy && (
+        <DndContext
+          sensors={sensors || undefined}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext items={widgets.map((w) => w.id)} strategy={verticalListSortingStrategy}>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {widgets.map((widget) => (
               <SortableWidget
@@ -140,6 +127,7 @@ export function DashboardWidgets() {
           </div>
         </SortableContext>
       </DndContext>
+      )}
 
       {isEditing && (
         <Card>
@@ -188,12 +176,16 @@ function SortableWidget({
   docsLoading: boolean;
   projectsLoading: boolean;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({
+  const { useSortable, CSS } = useDndKit();
+  
+  const sortableResult = useSortable ? useSortable({
     id: widget.id,
-  });
+  }) : { attributes: {}, listeners: {}, setNodeRef: null, transform: null, transition: '' };
+
+  const { attributes, listeners, setNodeRef, transform, transition } = sortableResult || { attributes: {}, listeners: {}, setNodeRef: null, transform: null, transition: '' };
 
   const style = {
-    transform: CSS.Transform.toString(transform),
+    transform: CSS && transform ? CSS.Transform.toString(transform) : undefined,
     transition,
   };
 
