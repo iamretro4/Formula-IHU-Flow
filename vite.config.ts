@@ -2,68 +2,6 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
-import type { Plugin } from "vite";
-
-// DRASTIC SOLUTION: Plugin to ensure React is ready before entry chunk executes
-// This wraps ALL chunks (not just entry) to wait for React if needed
-function ensureReactReadyPlugin(): Plugin {
-  return {
-    name: 'ensure-react-ready',
-    enforce: 'post',
-    generateBundle(options, bundle) {
-      // Process ALL chunks to ensure React is ready before they execute
-      Object.values(bundle).forEach(chunk => {
-        if (chunk.type === 'chunk') {
-          // Skip react-init chunk - it sets up React
-          if (chunk.fileName.includes('react-init') || chunk.modules && Object.keys(chunk.modules).some(id => id.includes('react-init'))) {
-            return;
-          }
-          
-          // Wrap chunk code to ensure React is ready - BLOCKING version
-          // Wait for both React to exist AND the __REACT_READY__ flag to be set
-          const reactCheck = `
-// CRITICAL: Block execution until React is fully initialized
-(function() {
-  if (typeof window !== 'undefined') {
-    var react = window.React;
-    var reactReady = window.__REACT_READY__;
-    // Synchronously wait for React to be ready (blocking)
-    var maxIterations = 100000; // Prevent infinite loop
-    var i = 0;
-    // Wait for both React hooks to exist AND the ready flag to be set
-    while ((!react || !react.useLayoutEffect || !react.useMemo || !react.useState || !reactReady) && i < maxIterations) {
-      react = window.React;
-      reactReady = window.__REACT_READY__;
-      i++;
-      // Small delay to allow other code to execute
-      if (i % 1000 === 0) {
-        // Yield to event loop every 1000 iterations
-        var start = Date.now();
-        while (Date.now() - start < 1) {
-          // Busy wait for 1ms
-        }
-      }
-    }
-    if (i >= maxIterations) {
-      console.error('CRITICAL: React not ready after', maxIterations, 'iterations');
-      console.error('React exists:', !!react);
-      console.error('React hooks:', {
-        useLayoutEffect: !!(react && react.useLayoutEffect),
-        useMemo: !!(react && react.useMemo),
-        useState: !!(react && react.useState)
-      });
-      console.error('React ready flag:', reactReady);
-      throw new Error('React initialization timeout');
-    }
-  }
-})();
-`;
-          chunk.code = reactCheck + chunk.code;
-        }
-      });
-    },
-  };
-}
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
@@ -73,8 +11,7 @@ export default defineConfig(({ mode }) => ({
   },
   plugins: [
     react(),
-    mode === "development" && componentTagger(),
-    ensureReactReadyPlugin()
+    mode === "development" && componentTagger()
   ].filter(Boolean),
   resolve: {
     alias: {
