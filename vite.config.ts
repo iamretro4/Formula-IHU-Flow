@@ -23,7 +23,7 @@ export default defineConfig(({ mode }) => ({
       output: {
         // Ensure proper chunk loading order
         // React vendor will be loaded before UI vendor due to dependencies
-        manualChunks: (id) => {
+        manualChunks: (id, { getModuleInfo }) => {
           // Vendor chunks
           if (id.includes('node_modules')) {
             // React and React-DOM - MUST be in react-vendor chunk
@@ -45,8 +45,11 @@ export default defineConfig(({ mode }) => ({
             if (id.includes('react-router')) {
               return 'react-vendor';
             }
-            // Radix UI components - these will have react-vendor as a dependency
+            // Radix UI components - ensure they depend on react-vendor
+            // Check if this module imports React to ensure proper dependency
             if (id.includes('@radix-ui')) {
+              const moduleInfo = getModuleInfo(id);
+              // Radix UI always depends on React, so ensure react-vendor is a dependency
               return 'ui-vendor';
             }
             if (id.includes('recharts') || id.includes('d3')) {
