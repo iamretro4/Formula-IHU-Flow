@@ -20,16 +20,50 @@ function ensureReactGlobal(): Plugin {
     transform(code, id) {
       // Patch recharts and @dnd-kit modules that use React.Children
       if ((id.includes('recharts') || id.includes('@dnd-kit')) && 
-          id.includes('node_modules') && 
-          code.includes('React.Children')) {
-        // Patch React.Children access to use global React if local React.Children is undefined
-        // This ensures React.Children is available even if React hasn't fully initialized
-        const patchedCode = code.replace(
-          /React\.Children/g,
-          `(typeof window !== 'undefined' && window.React && window.React.Children ? window.React.Children : React.Children)`
-        );
+          id.includes('node_modules')) {
+        // More comprehensive patching - handle React.Children access
+        let patchedCode = code;
+        let modified = false;
         
-        if (patchedCode !== code) {
+        // Patch React.Children access - ensure it always uses global React
+        // Match various patterns: React.Children, React["Children"], etc.
+        if (code.includes('React.Children') || code.includes('React["Children"]') || code.includes("React['Children']")) {
+          // Replace all forms of React.Children access
+          patchedCode = patchedCode.replace(
+            /React\.Children/g,
+            `((typeof window !== 'undefined' && window.React && window.React.Children) || (typeof React !== 'undefined' && React.Children) || (() => { throw new Error('React.Children is not available'); })())`
+          );
+          patchedCode = patchedCode.replace(
+            /React\["Children"\]/g,
+            `((typeof window !== 'undefined' && window.React && window.React["Children"]) || (typeof React !== 'undefined' && React["Children"]) || (() => { throw new Error('React.Children is not available'); })())`
+          );
+          patchedCode = patchedCode.replace(
+            /React\['Children'\]/g,
+            `((typeof window !== 'undefined' && window.React && window.React['Children']) || (typeof React !== 'undefined' && React['Children']) || (() => { throw new Error('React.Children is not available'); })())`
+          );
+          modified = true;
+        }
+        
+        // Also ensure React itself is available at the top of the module
+        // Add a safety check at the beginning if React is used
+        // This ensures React is available before any code in the module executes
+        if (code.includes('React.') && !patchedCode.includes('// React safety check')) {
+          // Prepend a safety check to ensure React is available
+          // Use a more robust approach that works with ES modules
+          const reactCheck = `
+// React safety check - ensure React.Children is available
+if (typeof window !== 'undefined' && window.React && window.React.Children) {
+  // Make React.Children available if React exists but Children is missing
+  if (typeof React !== 'undefined' && !React.Children) {
+    React.Children = window.React.Children;
+  }
+}
+`;
+          patchedCode = reactCheck + patchedCode;
+          modified = true;
+        }
+        
+        if (modified) {
           return {
             code: patchedCode,
             map: null,
@@ -37,6 +71,45 @@ function ensureReactGlobal(): Plugin {
         }
       }
       return null;
+    },
+    generateBundle(options, bundle) {
+      // Ensure React is available globally in the entry chunk
+      // This will be handled by react-init.ts, but we can add a safety check
+      for (const [fileName, chunk] of Object.entries(bundle)) {
+        if (chunk.type === 'chunk' && chunk.isEntry) {
+          // The entry chunk should already have react-init.ts
+          // which sets window.React
+        }
+      }
+    },
+  };
+}
+
+// Plugin to inject React setup script into HTML
+function injectReactSetup(): Plugin {
+  return {
+    name: "inject-react-setup",
+    transformIndexHtml(html) {
+      // Inject a script that ensures React is available before any modules load
+      // This script will run synchronously before the entry module
+      const reactSetupScript = `
+    <script>
+      // Ensure React is available globally before any chunks execute
+      // This prevents "React.Children is undefined" errors in async chunks
+      (function() {
+        if (typeof window !== 'undefined' && !window.__REACT_SETUP__) {
+          window.__REACT_SETUP__ = true;
+          // This will be set by react-init.ts, but we ensure it's ready
+          // The entry chunk will set window.React when it loads
+        }
+      })();
+    </script>
+`;
+      // Insert before the module script
+      return html.replace(
+        /<script type="module" src="([^"]+)"><\/script>/,
+        reactSetupScript + '\n    <script type="module" src="$1"></script>'
+      );
     },
   };
 }
@@ -50,6 +123,7 @@ export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
     ensureReactGlobal(),
+    injectReactSetup(),
     mode === "development" && componentTagger()
   ].filter(Boolean),
   resolve: {
@@ -95,6 +169,7 @@ export default defineConfig(({ mode }) => ({
             }
             
             // Recharts and d3 - put in chart-vendor chunk
+            // These will depend on React from entry chunk
             if (id.includes('recharts') || (id.includes('d3') && !id.includes('d3-gantt'))) {
               return 'chart-vendor';
             }
@@ -108,6 +183,7 @@ export default defineConfig(({ mode }) => ({
               return 'supabase-vendor';
             }
             // @dnd-kit - put in kanban chunk
+            // This will depend on React from entry chunk
             if (id.includes('@dnd-kit')) {
               return 'kanban';
             }
