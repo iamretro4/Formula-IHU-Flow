@@ -61,9 +61,10 @@ export default defineConfig(({ mode }) => ({
               return undefined; // Include in entry chunk
             }
             
-            // Radix UI components - put in separate chunk
+            // Radix UI - don't put in separate chunk, let it load with entry
+            // This prevents it from executing before React is ready
             if (id.includes('@radix-ui')) {
-              return 'ui-vendor';
+              return undefined; // Include in entry chunk so React loads first
             }
             
             // Recharts - don't put in separate chunk, let it load dynamically
