@@ -24,7 +24,7 @@
   <body>
     <div id="root"></div>
     <script>
-      // CRITICAL: Create a complete React.Children stub BEFORE any chunks load
+      // CRITICAL: Create a bulletproof React.Children stub BEFORE any chunks load
       // This must execute synchronously before any module code
       (function() {
         'use strict';
@@ -34,45 +34,83 @@
           window.React = {};
         }
         
-        // Create a complete stub with all React.Children methods
+        // Create a complete, functional stub with all React.Children methods
         // This prevents "can't access property" errors when chunks execute
         var createStub = function() {
-          return {
-            map: function() { return []; },
-            forEach: function() { },
-            count: function() { return 0; },
-            only: function() { return null; },
-            toArray: function() { return []; }
+          var stub = {
+            map: function(children, fn, ctx) {
+              if (children == null) return null;
+              return Array.isArray(children) ? children.map(fn, ctx) : fn(children, 0);
+            },
+            forEach: function(children, fn, ctx) {
+              if (children == null) return;
+              Array.isArray(children) ? children.forEach(fn, ctx) : fn(children, 0);
+            },
+            count: function(children) {
+              return children == null ? 0 : (Array.isArray(children) ? children.length : 1);
+            },
+            only: function(children) {
+              if (!Array.isArray(children) && children != null) return children;
+              return null;
+            },
+            toArray: function(children) {
+              return children == null ? [] : (Array.isArray(children) ? children : [children]);
+            }
           };
+          
+          // Make it non-configurable to prevent overwrites
+          Object.freeze(stub);
+          return stub;
         };
         
         var stub = createStub();
+        var realChildren = null;
         
-        // Set the stub immediately
+        // Set the stub immediately on both window.React and window
         window.React.Children = stub;
         window.__REACT_CHILDREN__ = stub;
         
-        // Create a getter/setter that always returns a valid object
-        Object.defineProperty(window.React, 'Children', {
-          get: function() {
-            // Always return something valid - prefer real, fallback to stub
-            return this.__realChildren || window.__REACT_CHILDREN__ || stub;
-          },
-          set: function(value) {
-            // Store the real Children when it becomes available
-            this.__realChildren = value;
-            window.__REACT_CHILDREN__ = value;
-            // Also set directly for immediate access
-            if (value && typeof value === 'object') {
-              Object.assign(stub, value);
-            }
-          },
-          configurable: true,
-          enumerable: true
-        });
+        // Create a robust getter/setter that ALWAYS returns a valid object
+        try {
+          Object.defineProperty(window.React, 'Children', {
+            get: function() {
+              // Always return something valid - prefer real, fallback to stub
+              return realChildren || window.__REACT_CHILDREN__ || stub;
+            },
+            set: function(value) {
+              // Store the real Children when it becomes available
+              realChildren = value;
+              window.__REACT_CHILDREN__ = value;
+              // Update stub methods if real Children is available
+              if (value && typeof value === 'object') {
+                try {
+                  Object.assign(stub, value);
+                } catch(e) {
+                  // If stub is frozen, that's okay - we have realChildren
+                }
+              }
+            },
+            configurable: true,
+            enumerable: true
+          });
+        } catch(e) {
+          // Fallback: direct assignment
+          window.React.Children = stub;
+        }
         
-        // Ensure it's set on the object directly too
-        window.React.Children = stub;
+        // Also ensure it's accessible via direct property access
+        if (!window.React.Children) {
+          window.React.Children = stub;
+        }
+        
+        // Make it available on globalThis as well
+        if (typeof globalThis !== 'undefined') {
+          if (!globalThis.React) {
+            globalThis.React = window.React;
+          } else {
+            globalThis.React.Children = stub;
+          }
+        }
       })();
     </script>
     <script type="module" src="/src/main.tsx"></script>
