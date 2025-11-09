@@ -94,7 +94,8 @@
         var realReact = null;
         var realChildren = null;
         
-        // Set the stub immediately
+        // Set the stub immediately on window first (before defineProperty)
+        // This ensures React is available even if defineProperty fails
         window.React = ReactStub;
         window.__REACT_CHILDREN__ = ReactStub.Children;
         
@@ -110,6 +111,7 @@
                 }
                 return realReact;
               }
+              // Always return stub if real React not available yet
               return ReactStub;
             },
             set: function(value) {
@@ -124,8 +126,19 @@
             configurable: true,
             enumerable: true
           });
+          
+          // Ensure the getter actually works by testing it
+          if (!window.React || !window.React.useLayoutEffect) {
+            // Getter might not be working, force set it
+            window.React = ReactStub;
+          }
         } catch(e) {
           // Fallback: direct assignment
+          window.React = ReactStub;
+        }
+        
+        // Force ensure React is set (in case defineProperty didn't work)
+        if (!window.React) {
           window.React = ReactStub;
         }
         

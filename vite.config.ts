@@ -142,7 +142,40 @@ export default defineConfig(({ mode }) => ({
               return undefined; // Include in entry chunk so React loads first
             }
             
+            // CRITICAL: Check if module imports React - if so, put in entry chunk
+            // This catches any library that uses React, even if not in our explicit list
+            try {
+              const moduleInfo = getModuleInfo(id);
+              if (moduleInfo) {
+                // Check all imports - if any import React, this module needs React
+                const imports = moduleInfo.importedIds || [];
+                const hasReactImport = imports.some(importId => 
+                  (importId.includes('/react/') || importId.includes('\\react\\')) &&
+                  !importId.includes('react-dom') &&
+                  !importId.includes('react-router')
+                );
+                if (hasReactImport) {
+                  return undefined; // Put in entry chunk - React must be available
+                }
+                
+                // Also check dynamic imports
+                const dynamicImports = moduleInfo.dynamicImports || [];
+                const hasReactDynamicImport = dynamicImports.some(importId =>
+                  (importId.includes('/react/') || importId.includes('\\react\\')) &&
+                  !importId.includes('react-dom') &&
+                  !importId.includes('react-router')
+                );
+                if (hasReactDynamicImport) {
+                  return undefined; // Put in entry chunk
+                }
+              }
+            } catch (e) {
+              // If we can't check module info, be conservative
+              // Only put in vendor if we're absolutely sure it's not React-dependent
+            }
+            
             // Default vendor chunk for other node_modules (non-React libraries)
+            // Only libraries that we're 100% sure don't use React go here
             return 'vendor';
           }
         },
