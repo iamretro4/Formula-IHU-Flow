@@ -66,9 +66,13 @@ export default defineConfig(({ mode }) => ({
               return 'ui-vendor';
             }
             
-            // Recharts and d3 - put in chart-vendor chunk
-            // Keep React in entry, but ensure chart-vendor can access it
-            if (id.includes('recharts') || (id.includes('d3') && !id.includes('d3-gantt'))) {
+            // Recharts - don't put in separate chunk, let it load dynamically
+            // This prevents it from being bundled until actually needed
+            if (id.includes('recharts')) {
+              return undefined; // Include in entry or let it be dynamically imported
+            }
+            // d3 - put in chart-vendor chunk (but not recharts)
+            if (id.includes('d3') && !id.includes('d3-gantt')) {
               return 'chart-vendor';
             }
             if (id.includes('react-hook-form') || id.includes('@hookform') || id.includes('zod')) {
@@ -80,10 +84,10 @@ export default defineConfig(({ mode }) => ({
             if (id.includes('@supabase')) {
               return 'supabase-vendor';
             }
-            // @dnd-kit - put in kanban chunk
-            // Keep React in entry, but ensure kanban can access it
+            // @dnd-kit - don't put in separate chunk, let it load dynamically
+            // This prevents it from being bundled until actually needed
             if (id.includes('@dnd-kit')) {
-              return 'kanban';
+              return undefined; // Include in entry or let it be dynamically imported
             }
             if (id.includes('d3-gantt') || id.includes('vis-network')) {
               return 'gantt';
