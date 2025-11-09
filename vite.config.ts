@@ -109,6 +109,7 @@ export default defineConfig(({ mode }) => ({
             }
             // CRITICAL: Don't put React-dependent libraries in vendor chunk
             // Check if it's a React-dependent library and put in entry instead
+            // This includes ALL libraries that use React, even if not obviously React-dependent
             const isReactDependent = 
               id.includes('react') || 
               id.includes('@tanstack') ||
@@ -117,7 +118,25 @@ export default defineConfig(({ mode }) => ({
               id.includes('zustand') ||
               id.includes('jotai') ||
               id.includes('recoil') ||
-              id.includes('valtio');
+              id.includes('valtio') ||
+              id.includes('embla-carousel-react') ||
+              id.includes('input-otp') ||
+              id.includes('lucide-react') ||
+              id.includes('next-themes') ||
+              id.includes('react-day-picker') ||
+              id.includes('react-dnd') ||
+              id.includes('react-flow') ||
+              id.includes('react-image-gallery') ||
+              id.includes('react-joyride') ||
+              id.includes('react-markdown') ||
+              id.includes('react-player') ||
+              id.includes('react-resizable-panels') ||
+              id.includes('react-swipeable') ||
+              id.includes('react-window') ||
+              id.includes('reactflow') ||
+              id.includes('sonner') ||
+              id.includes('vaul') ||
+              id.includes('cmdk'); // cmdk uses React internally
             
             if (isReactDependent) {
               return undefined; // Include in entry chunk so React loads first
