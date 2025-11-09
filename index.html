@@ -24,21 +24,45 @@
   <body>
     <div id="root"></div>
     <script>
-      // CRITICAL: Ensure React.Children is available before any modules load
-      // This prevents "React.Children is undefined" errors in async chunks
-      // This script runs synchronously before module scripts
+      // CRITICAL: Pre-initialize React placeholder to prevent lexical declaration errors
+      // This must happen before any module code executes, including prepended safety checks
       (function() {
-        // Simple function to ensure React.Children is available
-        var ensureReactChildren = function() {
+        'use strict';
+        
+        // Create a minimal React placeholder that won't cause initialization errors
+        // This ensures the prepended code in chunks has something safe to access
+        if (!window.React) {
+          window.React = {};
+        }
+        
+        // Set up a safe Children property that won't cause errors
+        if (!window.React.Children) {
           try {
-            if (window.React && typeof window.React === 'object' && !Array.isArray(window.React)) {
-              if (window.React.Children) {
-                window.__REACT_CHILDREN__ = window.React.Children;
-                return true;
-              } else if (window.__REACT_CHILDREN__) {
-                window.React.Children = window.__REACT_CHILDREN__;
-                return true;
+            Object.defineProperty(window.React, 'Children', {
+              value: null,
+              writable: true,
+              configurable: true,
+              enumerable: true
+            });
+          } catch (e) {
+            window.React.Children = null;
+          }
+        }
+        
+        // Cache for React.Children
+        window.__REACT_CHILDREN__ = null;
+        
+        // Function to safely update React when it becomes available
+        var updateReact = function(react) {
+          try {
+            if (react && react.Children) {
+              window.React = react;
+              window.__REACT_CHILDREN__ = react.Children;
+              // Ensure Children is set
+              if (!window.React.Children) {
+                window.React.Children = react.Children;
               }
+              return true;
             }
           } catch (e) {
             // Ignore errors
@@ -46,43 +70,22 @@
           return false;
         };
         
-        // Check immediately
-        ensureReactChildren();
-        
-        // Monitor for React to be set (runs before modules load)
+        // Monitor for React to be set
         var checkInterval = setInterval(function() {
-          if (ensureReactChildren()) {
-            clearInterval(checkInterval);
+          if (window.React && window.React !== window.__REACT_PLACEHOLDER__) {
+            if (updateReact(window.React)) {
+              clearInterval(checkInterval);
+            }
           }
-        }, 10);
+        }, 5);
         
-        // Clear interval after 1 second
+        // Clear after 2 seconds
         setTimeout(function() {
           clearInterval(checkInterval);
-        }, 1000);
+        }, 2000);
         
-        // Also patch React.Children access globally to prevent errors
-        // This creates a getter that always returns the cached version
-        try {
-          var originalReact = window.React;
-          Object.defineProperty(window, 'React', {
-            get: function() {
-              return originalReact || window.__REACT__;
-            },
-            set: function(value) {
-              originalReact = value;
-              window.__REACT__ = value;
-              if (value && value.Children) {
-                window.__REACT_CHILDREN__ = value.Children;
-              }
-              ensureReactChildren();
-            },
-            configurable: true,
-            enumerable: true
-          });
-        } catch (e) {
-          // If defineProperty fails, just monitor normally
-        }
+        // Store placeholder reference
+        window.__REACT_PLACEHOLDER__ = window.React;
       })();
     </script>
     <script type="module" src="/src/main.tsx"></script>

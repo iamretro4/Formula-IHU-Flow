@@ -7,17 +7,18 @@ import * as ReactDOM from "react-dom";
 // This MUST happen before any async chunks execute
 if (typeof window !== "undefined") {
   // Set React immediately - this is critical
-  // Use simple assignment to avoid interfering with module initialization
+  // Replace the placeholder with the real React
+  const existingReact = (window as any).React;
   (window as any).React = React;
   (window as any).ReactDOM = ReactDOM;
   
-  // Also ensure React.Children is explicitly available
-  // Some libraries access it directly and might fail if it's not immediately available
+  // Ensure React.Children is explicitly available
+  // This is critical for libraries that access it directly
   if (React && React.Children) {
+    (window as any).React.Children = React.Children;
     (window as any).__REACT_CHILDREN__ = React.Children;
     
-    // Ensure React.Children is set on the window.React object
-    // Use simple assignment to avoid defineProperty issues
+    // Also ensure it's not null/undefined (replace placeholder if needed)
     if (!(window as any).React.Children) {
       (window as any).React.Children = React.Children;
     }
