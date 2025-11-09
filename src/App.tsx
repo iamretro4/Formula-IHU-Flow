@@ -24,7 +24,24 @@ const queryClient = new QueryClient({
     queries: {
       staleTime: 30000, // 30 seconds
       refetchOnWindowFocus: false,
-      retry: 1,
+      retry: (failureCount, error: any) => {
+        // Don't retry on 404 errors (table doesn't exist, resource not found)
+        if (error?.code === "PGRST116" || error?.code === "42P01" || error?.message?.includes("404") || error?.message?.includes("NOT_FOUND")) {
+          return false;
+        }
+        // Retry once for other errors
+        return failureCount < 1;
+      },
+      onError: (error: any) => {
+        // Silently handle expected errors (missing tables, no rows, etc.)
+        if (error?.code === "PGRST116" || error?.code === "42P01" || error?.message?.includes("does not exist")) {
+          return; // Don't log expected errors
+        }
+        // Only log unexpected errors
+        if (error?.message && !error.message.includes("404") && !error.message.includes("NOT_FOUND")) {
+          console.error("Query error:", error);
+        }
+      },
     },
   },
 });

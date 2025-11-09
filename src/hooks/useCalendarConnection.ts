@@ -24,21 +24,34 @@ export const useCalendarConnection = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return null;
 
-      const { data, error } = await supabase
-        .from("calendar_connections")
+      const { data, error } = await (supabase
+        .from("calendar_connections" as any)
         .select("*")
         .eq("user_id", user.id)
         .eq("provider", "google")
         .eq("is_active", true)
-        .maybeSingle();
+        .maybeSingle()) as { data: CalendarConnection | null; error: any };
 
-      if (error && error.code !== "PGRST116") {
-        throw error;
+      // Handle errors gracefully
+      if (error) {
+        // PGRST116 = no rows returned (this is fine)
+        if (error.code === "PGRST116") {
+          return null;
+        }
+        // 42P01 = relation does not exist (table doesn't exist yet)
+        if (error.code === "42P01" || error.message?.includes("does not exist")) {
+          console.warn("calendar_connections table does not exist yet");
+          return null;
+        }
+        // For other errors, log but don't break the app
+        console.error("Error fetching calendar connection:", error);
+        return null;
       }
 
       return data as CalendarConnection | null;
     },
     staleTime: 30000,
+    retry: false, // Don't retry on error to avoid spam
   });
 };
 
@@ -101,11 +114,11 @@ export const useDisconnectCalendar = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
-      const { error } = await supabase
-        .from("calendar_connections")
+      const { error } = await (supabase
+        .from("calendar_connections" as any)
         .update({ is_active: false })
         .eq("user_id", user.id)
-        .eq("provider", "google");
+        .eq("provider", "google")) as { error: any };
 
       if (error) throw error;
     },
