@@ -6,8 +6,20 @@ import * as ReactDOM from "react-dom";
 // CRITICAL: Replace the stub with the real React.Children
 // This runs synchronously after the HTML script creates the stub
 if (typeof window !== "undefined") {
-  // Set React immediately
-  (window as any).React = React;
+  // Set React immediately using the setter from HTML script
+  try {
+    // Use the setter (created by HTML script) to replace the stub
+    (window as any).React = React;
+  } catch (e) {
+    // If setter fails, try direct assignment
+    try {
+      Object.assign((window as any).React, React);
+    } catch (e2) {
+      // If that fails, just set it directly (might overwrite getter/setter)
+      (window as any).React = React;
+    }
+  }
+  
   (window as any).ReactDOM = ReactDOM;
   
   // Replace the stub with the real React.Children
@@ -18,34 +30,32 @@ if (typeof window !== "undefined") {
     try {
       reactObj.Children = React.Children;
     } catch (e) {
-      // If setter fails, set directly
-      reactObj.__realChildren = React.Children;
-      reactObj.Children = React.Children;
+      // If setter fails, try to set Children directly
+      try {
+        if (Object.isExtensible(reactObj)) {
+          reactObj.Children = React.Children;
+        } else {
+          // Object is frozen/sealed, use the getter/setter mechanism
+          // The HTML script's getter will return realChildren when available
+          // Just cache it for the getter to use
+          (window as any).__REACT_CHILDREN__ = React.Children;
+        }
+      } catch (e2) {
+        // Last resort: just cache it
+        (window as any).__REACT_CHILDREN__ = React.Children;
+      }
     }
   
     // Also cache it for direct access
     (window as any).__REACT_CHILDREN__ = React.Children;
   
-    // Force ensure it's accessible
-    if (!reactObj.Children) {
-      reactObj.Children = React.Children;
-    }
-  
-    // Make sure all methods are accessible
-    if (React.Children.map) {
-      reactObj.Children.map = React.Children.map;
-    }
-    if (React.Children.forEach) {
-      reactObj.Children.forEach = React.Children.forEach;
-    }
-    if (React.Children.count) {
-      reactObj.Children.count = React.Children.count;
-    }
-    if (React.Children.only) {
-      reactObj.Children.only = React.Children.only;
-    }
-    if (React.Children.toArray) {
-      reactObj.Children.toArray = React.Children.toArray;
+    // Try to ensure Children is accessible (only if object is extensible)
+    if (Object.isExtensible(reactObj) && !reactObj.Children) {
+      try {
+        reactObj.Children = React.Children;
+      } catch (e) {
+        // Ignore - will use cached version
+      }
     }
   }
 }
