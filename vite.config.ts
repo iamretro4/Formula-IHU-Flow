@@ -8,76 +8,8 @@ import type { Plugin } from "vite";
 const chunksNeedingReact = new Set<string>();
 const processedModules = new Set<string>();
 
-// Plugin to patch final bundled chunks to use global React.Children
-// This works with the HTML stub to ensure React.Children is always available
-function ensureReactGlobal(): Plugin {
-  return {
-    name: "ensure-react-global",
-    buildStart() {
-      chunksNeedingReact.clear();
-      processedModules.clear();
-    },
-    // Use renderChunk to patch the final bundled code (after minification)
-    renderChunk(code, chunk, options) {
-      // Only patch chunks that contain recharts or @dnd-kit
-      const fileName = chunk.fileName || '';
-      const isChartVendor = fileName.includes('chart-vendor');
-      const isKanban = fileName.includes('kanban');
-      
-      if (!isChartVendor && !isKanban) {
-        return null;
-      }
-      
-      // Check if code references React.Children
-      if (!code.includes('Children')) {
-        return null;
-      }
-      
-      let patchedCode = code;
-      let modified = false;
-      
-      // Create a unique marker to prevent recursive replacements
-      // Use a static marker that won't appear in the actual code
-      const marker = '__REACT_CHILDREN_SAFE_MARKER_XYZ123__';
-      
-      // Step 1: Replace all React.Children references with markers
-      patchedCode = patchedCode.replace(
-        /React\.Children/g,
-        marker + '_DOT'
-      );
-      
-      patchedCode = patchedCode.replace(
-        /React\["Children"\]/g,
-        marker + '_BRACKET'
-      );
-      
-      patchedCode = patchedCode.replace(
-        /React\['Children'\]/g,
-        marker + '_SQUOTE'
-      );
-      
-      // Step 2: Replace markers with safe accessor that uses the HTML stub
-      // The stub in index.html ensures window.React.Children is always available
-      const safeAccessor = `(typeof window !== 'undefined' && window.React && window.React.Children ? window.React.Children : (typeof window !== 'undefined' && window.__REACT_CHILDREN__ ? window.__REACT_CHILDREN__ : (typeof React !== 'undefined' && React.Children ? React.Children : (() => { throw new Error('React.Children is not available'); })())))`;
-      
-      const escapedMarker = marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      patchedCode = patchedCode.replace(new RegExp(escapedMarker + '_DOT', 'g'), safeAccessor);
-      patchedCode = patchedCode.replace(new RegExp(escapedMarker + '_BRACKET', 'g'), safeAccessor);
-      patchedCode = patchedCode.replace(new RegExp(escapedMarker + '_SQUOTE', 'g'), safeAccessor);
-      
-      modified = true;
-      
-      if (modified) {
-        return {
-          code: patchedCode,
-          map: null, // Don't generate source maps for patched chunks
-        };
-      }
-      
-      return null;
-    },
-  };
-}
+// No patching needed - rely entirely on HTML stub
+// The stub in index.html creates window.React.Children before any chunks load
 
 // Plugin removed - we now use the stub in index.html directly
 // This was causing conflicts with the HTML stub approach
@@ -90,7 +22,6 @@ export default defineConfig(({ mode }) => ({
   },
   plugins: [
     react(),
-    ensureReactGlobal(),
     mode === "development" && componentTagger()
   ].filter(Boolean),
   resolve: {
