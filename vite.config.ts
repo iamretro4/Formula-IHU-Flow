@@ -67,28 +67,17 @@ export default defineConfig(({ mode }) => ({
       output: {
         // Ensure proper chunk loading order
         // React vendor will be loaded before UI vendor due to dependencies
-        // DRASTIC SOLUTION: Remove vendor chunk entirely - put everything in entry chunk
+        // DRASTIC SOLUTION: Put React back in entry chunk to ensure it's always available
         // This ensures React is always available before any library code executes
         manualChunks: (id, { getModuleInfo }) => {
           // Only create separate chunks for very large, non-React libraries
           if (id.includes('node_modules')) {
-            const isReact = 
-              (id.includes('/react/') && id.includes('node_modules')) || 
-              (id.includes('\\react\\') && id.includes('node_modules')) ||
-              (id.includes('/react-dom/') && id.includes('node_modules')) || 
-              (id.includes('\\react-dom\\') && id.includes('node_modules')) ||
-              (id.includes('/react/jsx-runtime') && id.includes('node_modules')) ||
-              (id.includes('\\react\\jsx-runtime') && id.includes('node_modules')) ||
-              (id.includes('/react-dom/client') && id.includes('node_modules')) ||
-              (id.includes('\\react-dom\\client') && id.includes('node_modules'));
-            
-            // React in separate chunk that loads first
-            if (isReact) {
-              return 'react-vendor';
-            }
+            // CRITICAL: Put React in entry chunk (undefined) to ensure it loads with entry
+            // This guarantees React is available before any other code executes
+            // Don't put React in separate chunk - it must be in entry chunk
             
             // Only very large, non-React libraries get separate chunks
-            // Everything else goes to entry chunk where React is available
+            // Everything else (including React) goes to entry chunk where React is available
             if (id.includes('pdfjs-dist')) {
               return 'pdf'; // Very large, non-React
             }
@@ -99,7 +88,7 @@ export default defineConfig(({ mode }) => ({
               return 'gantt'; // Large, non-React
             }
             
-            // EVERYTHING ELSE goes to entry chunk (undefined = entry chunk)
+            // EVERYTHING ELSE (including React) goes to entry chunk (undefined = entry chunk)
             // This ensures React is available before any library code executes
             return undefined;
           }
