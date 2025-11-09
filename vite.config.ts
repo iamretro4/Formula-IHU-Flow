@@ -2,6 +2,18 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
+import type { Plugin } from "vite";
+
+// Plugin to ensure React is available before other modules execute
+function ensureReactGlobal(): Plugin {
+  return {
+    name: "ensure-react-global",
+    buildStart() {
+      // This plugin ensures React is available globally
+      // The actual work is done in main.tsx by setting window.React
+    },
+  };
+}
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
@@ -11,6 +23,7 @@ export default defineConfig(({ mode }) => ({
   },
   plugins: [
     react(),
+    ensureReactGlobal(),
     mode === "development" && componentTagger()
   ].filter(Boolean),
   resolve: {
@@ -29,8 +42,9 @@ export default defineConfig(({ mode }) => ({
         manualChunks: (id, { getModuleInfo }) => {
           // Vendor chunks
           if (id.includes('node_modules')) {
-            // React and React-DOM - Put in dedicated chunk that loads first
-            // This prevents "forwardRef" and "Children" undefined errors
+            // React and React-DOM - MUST be in entry chunk
+            // This is critical to prevent "forwardRef" and "Children" undefined errors
+            // React must load and initialize before ANY other code runs
             const isReact = 
               (id.includes('/react/') && id.includes('node_modules')) || 
               (id.includes('\\react\\') && id.includes('node_modules')) ||
@@ -41,12 +55,10 @@ export default defineConfig(({ mode }) => ({
               (id.includes('/react-dom/client') && id.includes('node_modules')) ||
               (id.includes('\\react-dom\\client') && id.includes('node_modules'));
             
-            // Include React in entry chunk to ensure it's always available first
-            // This prevents "forwardRef" and "Children" undefined errors
-            // By including React in the entry chunk, it's guaranteed to load and initialize
-            // before any other chunks that depend on it (like chart-vendor)
+            // CRITICAL: React MUST be in entry chunk, not a separate chunk
+            // This ensures React initializes synchronously before any other modules
             if (isReact) {
-              return undefined; // Include in entry chunk
+              return undefined; // Include in entry chunk - this is essential!
             }
             // React Router depends on React - also include in entry
             if (id.includes('react-router')) {
