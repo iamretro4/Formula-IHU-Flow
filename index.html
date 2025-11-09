@@ -24,19 +24,17 @@
   <body>
     <div id="root"></div>
     <script>
-      // FINAL APPROACH: Create React.Children stub that's ALWAYS accessible
-      // This runs synchronously before ANY module code, including chunks
+      // Create a complete React stub before any chunks load
+      // This prevents "can't access property" errors when libraries try to access React APIs
       (function() {
         'use strict';
         
-        // Create React object immediately
-        if (typeof window !== 'undefined' && !window.React) {
-          window.React = {};
-        }
+        if (typeof window === 'undefined') return;
         
-        // Create a complete, functional stub
-        var createStub = function() {
-          return {
+        // Create React object with common APIs that libraries might access
+        var ReactStub = {
+          // Children stub
+          Children: {
             map: function(children, fn, ctx) {
               if (children == null) return null;
               return Array.isArray(children) ? children.map(fn, ctx) : fn(children, 0);
@@ -55,43 +53,77 @@
             toArray: function(children) {
               return children == null ? [] : (Array.isArray(children) ? children : [children]);
             }
-          };
+          },
+          // Scheduler APIs that some libraries access
+          unstable_now: function() {
+            return Date.now();
+          },
+          // Common React exports that might be accessed
+          version: '18.0.0',
+          Component: function() {},
+          PureComponent: function() {},
+          Fragment: {},
+          StrictMode: {},
+          Suspense: {},
+          createElement: function() { return null; },
+          cloneElement: function() { return null; },
+          createContext: function() { return { Provider: {}, Consumer: {} }; },
+          forwardRef: function() { return function() {}; },
+          memo: function() { return function() {}; },
+          lazy: function() { return function() {}; },
+          useCallback: function() { return function() {}; },
+          useContext: function() { return null; },
+          useDebugValue: function() {},
+          useEffect: function() {},
+          useImperativeHandle: function() {},
+          useLayoutEffect: function() {},
+          useMemo: function() { return null; },
+          useReducer: function() { return [null, function() {}]; },
+          useRef: function() { return { current: null }; },
+          useState: function() { return [null, function() {}]; },
         };
         
-        var stub = createStub();
+        var realReact = null;
         var realChildren = null;
         
-        // Set stub immediately
-        if (typeof window !== 'undefined') {
-          window.React.Children = stub;
-          window.__REACT_CHILDREN__ = stub;
-          
-          // Create getter/setter that ALWAYS returns something valid
-          try {
-            Object.defineProperty(window.React, 'Children', {
-              get: function() {
-                return realChildren || window.__REACT_CHILDREN__ || stub;
-              },
-              set: function(value) {
-                realChildren = value;
-                window.__REACT_CHILDREN__ = value;
-              },
-              configurable: true,
-              enumerable: true
-            });
-          } catch(e) {
-            // Fallback: direct assignment
-            window.React.Children = stub;
-          }
-          
-          // Also set on globalThis
-          if (typeof globalThis !== 'undefined') {
-            if (!globalThis.React) {
-              globalThis.React = window.React;
-            } else {
-              globalThis.React.Children = stub;
-            }
-          }
+        // Set the stub immediately
+        window.React = ReactStub;
+        window.__REACT_CHILDREN__ = ReactStub.Children;
+        
+        // Create getter/setter for React that merges stub with real React when available
+        try {
+          Object.defineProperty(window, 'React', {
+            get: function() {
+              // Return real React if available, otherwise stub
+              if (realReact) {
+                // Merge stub properties into real React for safety
+                if (!realReact.Children && ReactStub.Children) {
+                  realReact.Children = realChildren || ReactStub.Children;
+                }
+                return realReact;
+              }
+              return ReactStub;
+            },
+            set: function(value) {
+              realReact = value;
+              realChildren = value && value.Children;
+              window.__REACT_CHILDREN__ = realChildren || ReactStub.Children;
+              // Merge stub properties if real React doesn't have them
+              if (value && !value.Children) {
+                value.Children = ReactStub.Children;
+              }
+            },
+            configurable: true,
+            enumerable: true
+          });
+        } catch(e) {
+          // Fallback: direct assignment
+          window.React = ReactStub;
+        }
+        
+        // Also set on globalThis
+        if (typeof globalThis !== 'undefined') {
+          globalThis.React = window.React;
         }
       })();
     </script>
