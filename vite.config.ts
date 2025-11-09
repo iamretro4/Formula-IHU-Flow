@@ -4,12 +4,30 @@ import path from "path";
 import { componentTagger } from "lovable-tagger";
 import type { Plugin } from "vite";
 
-// Plugin to ensure react-init is in entry chunk and loads first
+// Plugin to patch recharts to ensure React.Children is available
+// This fixes the "React.Children is undefined" error
 function ensureReactGlobal(): Plugin {
   return {
     name: "ensure-react-global",
-    // This plugin ensures react-init.ts is processed and included in entry chunk
-    // The actual work is done by importing react-init first in main.tsx
+    transform(code, id) {
+      // Only process recharts modules that use React.Children
+      if (id.includes('recharts') && id.includes('node_modules') && code.includes('React.Children')) {
+        // Patch React.Children access to use global React if local React.Children is undefined
+        // This ensures React.Children is available even if React hasn't fully initialized
+        const patchedCode = code.replace(
+          /React\.Children/g,
+          `(typeof window !== 'undefined' && window.React && window.React.Children ? window.React.Children : React.Children)`
+        );
+        
+        if (patchedCode !== code) {
+          return {
+            code: patchedCode,
+            map: null,
+          };
+        }
+      }
+      return null;
+    },
   };
 }
 
@@ -40,9 +58,6 @@ export default defineConfig(({ mode }) => ({
         manualChunks: (id, { getModuleInfo }) => {
           // Vendor chunks
           if (id.includes('node_modules')) {
-            // React and React-DOM - MUST be in entry chunk
-            // This is critical to prevent "forwardRef" and "Children" undefined errors
-            // React must load and initialize before ANY other code runs
             const isReact = 
               (id.includes('/react/') && id.includes('node_modules')) || 
               (id.includes('\\react\\') && id.includes('node_modules')) ||
@@ -53,28 +68,48 @@ export default defineConfig(({ mode }) => ({
               (id.includes('/react-dom/client') && id.includes('node_modules')) ||
               (id.includes('\\react-dom\\client') && id.includes('node_modules'));
             
-            // CRITICAL: React MUST be in entry chunk, not a separate chunk
-            // This ensures React initializes synchronously before any other modules
+            // Check if this is a recharts module that imports React
+            // If so, we need to ensure React is available in chart-vendor
+            const isRecharts = id.includes('recharts');
+            const isD3 = id.includes('d3') && !id.includes('d3-gantt');
+            
+            // If this is React and we're in a recharts context, include in chart-vendor
+            // Otherwise, include React in entry chunk
             if (isReact) {
-              return undefined; // Include in entry chunk - this is essential!
+              // Check if any module that imports this React module is recharts
+              try {
+                const moduleInfo = getModuleInfo(id);
+                if (moduleInfo) {
+                  // Check if recharts modules import this React module
+                  const isImportedByRecharts = moduleInfo.importedIds?.some(impId => 
+                    impId.includes('recharts')
+                  ) || false;
+                  
+                  // If recharts imports this React module, include it in chart-vendor
+                  // This ensures React is available when recharts executes
+                  if (isImportedByRecharts || (isRecharts && isReact)) {
+                    return 'chart-vendor';
+                  }
+                }
+              } catch (e) {
+                // If we can't determine, default to entry chunk
+              }
+              // Default: include React in entry chunk
+              return undefined;
             }
+            
             // React Router depends on React - also include in entry
             if (id.includes('react-router')) {
               return undefined; // Include in entry chunk
             }
-            // Radix UI components - put in separate chunk but ensure React is loaded first
+            
+            // Radix UI components - put in separate chunk
             if (id.includes('@radix-ui')) {
               return 'ui-vendor';
             }
-            // Recharts and d3 - ensure they depend on entry chunk for React
-            // This is critical because recharts accesses React.Children at module eval time
-            if (id.includes('recharts') || id.includes('d3')) {
-              // Check if this module imports React
-              const moduleInfo = getModuleInfo(id);
-              if (moduleInfo) {
-                // Ensure chart-vendor depends on entry chunk by checking imports
-                // Rollup will automatically create the dependency
-              }
+            
+            // Recharts and d3 - put in chart-vendor chunk
+            if (isRecharts || isD3) {
               return 'chart-vendor';
             }
             if (id.includes('react-hook-form') || id.includes('@hookform') || id.includes('zod')) {
