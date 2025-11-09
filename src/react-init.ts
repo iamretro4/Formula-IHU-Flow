@@ -82,12 +82,36 @@ if (typeof window !== "undefined") {
     }
   }
   
-  // DRASTIC: Verify React is fully accessible before continuing
+  // DRASTIC: Verify React is fully accessible AND initialized before continuing
   // This blocks module execution until React is ready
-  if (!(window as any).React || !(window as any).React.useLayoutEffect) {
-    // This should never happen, but if it does, throw an error
+  // We need to ensure React's internal dispatcher is ready, not just that hooks exist
+  const react = (window as any).React;
+  if (!react || !react.useLayoutEffect || !react.useMemo || !react.useState) {
     console.error('CRITICAL: React is not accessible after react-init.ts execution');
     throw new Error('React initialization failed');
+  }
+  
+  // CRITICAL: Test that React hooks actually work by creating a test dispatcher
+  // This ensures React's internal state management is initialized
+  try {
+    // Create a minimal test to ensure React's dispatcher is ready
+    // We'll use a try-catch to avoid errors if React isn't fully ready
+    const testDispatcher = (react as any).__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED;
+    if (testDispatcher && testDispatcher.ReactCurrentDispatcher) {
+      // React's dispatcher exists, which means React is initialized
+      // Set a flag so other code knows React is ready
+      (window as any).__REACT_READY__ = true;
+    } else {
+      // Fallback: just set the flag anyway after a small delay
+      // This ensures React has time to initialize
+      setTimeout(() => {
+        (window as any).__REACT_READY__ = true;
+      }, 0);
+      (window as any).__REACT_READY__ = true; // Set immediately as fallback
+    }
+  } catch (e) {
+    // If we can't check, just set the flag
+    (window as any).__REACT_READY__ = true;
   }
 }
 

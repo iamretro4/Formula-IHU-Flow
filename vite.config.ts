@@ -20,16 +20,20 @@ function ensureReactReadyPlugin(): Plugin {
           }
           
           // Wrap chunk code to ensure React is ready - BLOCKING version
+          // Wait for both React to exist AND the __REACT_READY__ flag to be set
           const reactCheck = `
 // CRITICAL: Block execution until React is fully initialized
 (function() {
   if (typeof window !== 'undefined') {
     var react = window.React;
+    var reactReady = window.__REACT_READY__;
     // Synchronously wait for React to be ready (blocking)
     var maxIterations = 100000; // Prevent infinite loop
     var i = 0;
-    while ((!react || !react.useLayoutEffect || !react.useMemo || !react.useState) && i < maxIterations) {
+    // Wait for both React hooks to exist AND the ready flag to be set
+    while ((!react || !react.useLayoutEffect || !react.useMemo || !react.useState || !reactReady) && i < maxIterations) {
       react = window.React;
+      reactReady = window.__REACT_READY__;
       i++;
       // Small delay to allow other code to execute
       if (i % 1000 === 0) {
@@ -42,6 +46,13 @@ function ensureReactReadyPlugin(): Plugin {
     }
     if (i >= maxIterations) {
       console.error('CRITICAL: React not ready after', maxIterations, 'iterations');
+      console.error('React exists:', !!react);
+      console.error('React hooks:', {
+        useLayoutEffect: !!(react && react.useLayoutEffect),
+        useMemo: !!(react && react.useMemo),
+        useState: !!(react && react.useState)
+      });
+      console.error('React ready flag:', reactReady);
       throw new Error('React initialization timeout');
     }
   }
