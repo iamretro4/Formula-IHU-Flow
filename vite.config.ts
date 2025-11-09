@@ -26,8 +26,8 @@ export default defineConfig(({ mode }) => ({
         manualChunks: (id, { getModuleInfo }) => {
           // Vendor chunks
           if (id.includes('node_modules')) {
-            // React and React-DOM - MUST be in react-vendor chunk
-            // Use more precise matching to catch all React modules
+            // React and React-DOM - Include in entry chunk to ensure it loads first
+            // This prevents "forwardRef is undefined" errors when UI chunks load
             const isReact = 
               (id.includes('/react/') && id.includes('node_modules')) || 
               (id.includes('\\react\\') && id.includes('node_modules')) ||
@@ -38,18 +38,17 @@ export default defineConfig(({ mode }) => ({
               (id.includes('/react-dom/client') && id.includes('node_modules')) ||
               (id.includes('\\react-dom\\client') && id.includes('node_modules'));
             
+            // Return undefined for React to include it in entry chunk
+            // This ensures React is always available before other chunks load
             if (isReact) {
-              return 'react-vendor';
+              return undefined; // Include in entry chunk
             }
-            // React Router depends on React
+            // React Router depends on React - also include in entry
             if (id.includes('react-router')) {
-              return 'react-vendor';
+              return undefined; // Include in entry chunk
             }
-            // Radix UI components - ensure they depend on react-vendor
-            // Check if this module imports React to ensure proper dependency
+            // Radix UI components - put in separate chunk but ensure React is loaded first
             if (id.includes('@radix-ui')) {
-              const moduleInfo = getModuleInfo(id);
-              // Radix UI always depends on React, so ensure react-vendor is a dependency
               return 'ui-vendor';
             }
             if (id.includes('recharts') || id.includes('d3')) {
