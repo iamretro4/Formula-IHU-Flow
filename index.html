@@ -133,6 +133,17 @@
         if (typeof globalThis !== 'undefined') {
           globalThis.React = window.React;
         }
+        
+        // CRITICAL: Also set React on the global scope for module imports
+        // Some libraries might try to import React directly
+        if (typeof global !== 'undefined') {
+          global.React = window.React;
+        }
+        
+        // Ensure React is accessible everywhere
+        if (typeof self !== 'undefined') {
+          self.React = window.React;
+        }
       })();
     </script>
     <script type="module" src="/src/main.tsx"></script>
