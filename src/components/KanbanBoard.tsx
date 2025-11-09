@@ -4,7 +4,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Task } from "@/types";
-import { useDndKit } from "@/lib/dynamic-dnd-kit";
+import { DndContext, closestCorners, DragOverlay, useDroppable } from "@dnd-kit/core";
+import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, Plus } from "lucide-react";
 import { TaskDialog } from "./TaskDialog";
 
@@ -21,7 +23,6 @@ type KanbanBoardProps = {
 };
 
 export function KanbanBoard({ projectId, onTaskUpdate }: KanbanBoardProps) {
-  const { dndKit, loading: dndLoading, DndContext, DragOverlay, SortableContext, useSortable, useDroppable, closestCorners, verticalListSortingStrategy, CSS } = useDndKit();
   
   const [columns, setColumns] = useState<KanbanColumn[]>([
     { id: "pending", title: "Pending", status: "pending", tasks: [] },
@@ -167,7 +168,7 @@ export function KanbanBoard({ projectId, onTaskUpdate }: KanbanBoardProps) {
     return tasks.find((t) => t.id === activeId);
   }, [tasks, activeId]);
 
-  if (loading || dndLoading || !DndContext || !closestCorners) {
+  if (loading) {
     return <div className="text-center p-8">Loading board...</div>;
   }
 
@@ -190,17 +191,15 @@ export function KanbanBoard({ projectId, onTaskUpdate }: KanbanBoardProps) {
         {/* Scroll indicator */}
         <div className="absolute right-0 top-0 bottom-4 w-8 bg-gradient-to-l from-background to-transparent pointer-events-none hidden sm:block" />
       </div>
-      {DragOverlay && (
-        <DragOverlay>
-          {activeTask ? (
-            <Card className="w-64 p-2 shadow-lg">
-              <p className="text-sm font-medium">
+      <DragOverlay>
+        {activeTask ? (
+          <Card className="w-64 p-2 shadow-lg">
+            <p className="text-sm font-medium">
               {activeTask.title}
             </p>
           </Card>
         ) : null}
-        </DragOverlay>
-      )}
+      </DragOverlay>
       {taskDialogOpen && selectedTask && (
         <TaskDialog
           open={taskDialogOpen}
@@ -224,18 +223,10 @@ const KanbanColumn = memo(function KanbanColumn({
   column: KanbanColumn;
   onTaskClick: (task: Task) => void;
 }) {
-  const { useDroppable, SortableContext, verticalListSortingStrategy } = useDndKit();
-  
-  const droppableResult = useDroppable ? useDroppable({
+  const { setNodeRef, isOver } = useDroppable({
     id: column.id,
-  }) : { setNodeRef: null, isOver: false };
-
-  const { setNodeRef, isOver } = droppableResult || { setNodeRef: null, isOver: false };
+  });
   const taskIds = useMemo(() => column.tasks.map((t) => t.id), [column.tasks]);
-
-  if (!SortableContext || !verticalListSortingStrategy) {
-    return <div>Loading...</div>;
-  }
 
   return (
     <div className="flex-shrink-0 w-64 sm:w-72 snap-start min-w-[256px] sm:min-w-[288px]">
@@ -259,19 +250,15 @@ const KanbanColumn = memo(function KanbanColumn({
 });
 
 const KanbanTask = memo(function KanbanTask({ task, onClick }: { task: Task; onClick: (task: Task) => void }) {
-  const { useSortable, CSS } = useDndKit();
-  
-  const sortableResult = useSortable ? useSortable({
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
-  }) : { attributes: {}, listeners: {}, setNodeRef: null, transform: null, transition: '', isDragging: false };
-
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = sortableResult || { attributes: {}, listeners: {}, setNodeRef: null, transform: null, transition: '', isDragging: false };
+  });
 
   const style = useMemo(() => ({
-    transform: CSS && transform ? CSS.Transform.toString(transform) : undefined,
+    transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.5 : 1,
-  }), [transform, transition, isDragging, CSS]);
+  }), [transform, transition, isDragging]);
 
   const formattedDate = useMemo(() => {
     return task.due_date ? new Date(task.due_date).toLocaleDateString() : null;

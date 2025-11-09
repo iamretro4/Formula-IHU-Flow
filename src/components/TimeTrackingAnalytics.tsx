@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
-import { useRecharts } from "@/lib/dynamic-recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, LineChart, Line } from "recharts";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Clock, TrendingUp, Calendar, Target } from "lucide-react";
 
@@ -25,7 +25,6 @@ type TimeAnalytics = {
 };
 
 export function TimeTrackingAnalytics({ entityType, entityId }: { entityType?: string; entityId?: string }) {
-  const { recharts, loading: chartsLoading, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, LineChart, Line } = useRecharts();
   const [analytics, setAnalytics] = useState<TimeAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
@@ -232,88 +231,72 @@ export function TimeTrackingAnalytics({ entityType, entityId }: { entityType?: s
       </div>
 
       {/* Charts */}
-      {!chartsLoading && BarChart && (
-        <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <CardTitle>Time by Day (Last 7 Days)</CardTitle>
-              <CardDescription>Daily time tracking breakdown</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {ResponsiveContainer && (
-                <ResponsiveContainer width="100%" height={250}>
-                  {BarChart && (
-                    <BarChart data={analytics.entriesByDay}>
-                      {CartesianGrid && <CartesianGrid strokeDasharray="3 3" />}
-                      {XAxis && <XAxis dataKey="date" tickFormatter={(date: string) => new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} />}
-                      {YAxis && <YAxis />}
-                      {Tooltip && <Tooltip />}
-                      {Bar && <Bar dataKey="hours" fill="#0088FE" radius={[8, 8, 0, 0]} />}
-                    </BarChart>
-                  )}
-                </ResponsiveContainer>
-              )}
-            </CardContent>
-          </Card>
+      <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Time by Day (Last 7 Days)</CardTitle>
+            <CardDescription>Daily time tracking breakdown</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={250}>
+              <BarChart data={analytics.entriesByDay}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="date" tickFormatter={(date: string) => new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} />
+                <YAxis />
+                <Tooltip />
+                <Bar dataKey="hours" fill="#0088FE" radius={[8, 8, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Time by Task (Top 5)</CardTitle>
-              <CardDescription>Time distribution across tasks</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {ResponsiveContainer && (
-                <ResponsiveContainer width="100%" height={250}>
-                  {PieChart && (
-                    <PieChart>
-                      {Pie && (
-                        <Pie
-                          data={analytics.entriesByTask}
-                          cx="50%"
-                          cy="50%"
-                          labelLine={false}
-                          label={({ taskTitle, hours }: any) => `${taskTitle.substring(0, 15)}: ${hours}h`}
-                          outerRadius={80}
-                          fill="#8884d8"
-                          dataKey="hours"
-                        >
-                          {analytics.entriesByTask.map((entry, index) => (
-                            Cell && <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                          ))}
-                        </Pie>
-                      )}
-                      {Tooltip && <Tooltip />}
-                      {Legend && <Legend />}
-                    </PieChart>
-                  )}
-                </ResponsiveContainer>
-              )}
-            </CardContent>
-          </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Time by Task (Top 5)</CardTitle>
+            <CardDescription>Time distribution across tasks</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={250}>
+              <PieChart>
+                <Pie
+                  data={analytics.entriesByTask}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  label={({ taskTitle, hours }: any) => `${taskTitle.substring(0, 15)}: ${hours}h`}
+                  outerRadius={80}
+                  fill="#8884d8"
+                  dataKey="hours"
+                >
+                  {analytics.entriesByTask.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
 
-          <Card className="md:col-span-2">
-            <CardHeader>
-              <CardTitle>Time by Week (Last 4 Weeks)</CardTitle>
-              <CardDescription>Weekly time tracking trends</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {ResponsiveContainer && (
-                <ResponsiveContainer width="100%" height={250}>
-                  {LineChart && (
-                    <LineChart data={analytics.entriesByWeek}>
-                      {CartesianGrid && <CartesianGrid strokeDasharray="3 3" />}
-                      {XAxis && <XAxis dataKey="week" tickFormatter={(week: string) => new Date(week).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} />}
-                      {YAxis && <YAxis />}
-                      {Tooltip && <Tooltip />}
-                      {Line && <Line type="monotone" dataKey="hours" stroke="#0088FE" strokeWidth={2} />}
-                    </LineChart>
-                  )}
-                </ResponsiveContainer>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      )}
+        <Card className="md:col-span-2">
+          <CardHeader>
+            <CardTitle>Time by Week (Last 4 Weeks)</CardTitle>
+            <CardDescription>Weekly time tracking trends</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={250}>
+              <LineChart data={analytics.entriesByWeek}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="week" tickFormatter={(week: string) => new Date(week).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} />
+                <YAxis />
+                <Tooltip />
+                <Line type="monotone" dataKey="hours" stroke="#0088FE" strokeWidth={2} />
+              </LineChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

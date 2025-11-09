@@ -7,13 +7,11 @@ import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DashboardWidgets } from "@/components/DashboardWidgets";
 import { CheckSquare, FileText, Users, AlertCircle, Clock, CheckCircle2, TrendingUp, Calendar as CalendarIcon } from "lucide-react";
-import { useRecharts } from "@/lib/dynamic-recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
 import { useQuery } from "@tanstack/react-query";
 import { Task, ChartData } from "@/types";
 
 const Dashboard = () => {
-  // Load recharts dynamically after React is ready
-  const { recharts, loading: chartsLoading, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } = useRecharts();
 
   // Add data-tour attribute for onboarding
 
@@ -279,7 +277,7 @@ const Dashboard = () => {
         </Card>
 
         {/* Charts Section */}
-        {stats.totalTasks > 0 && !chartsLoading && BarChart && (
+        {stats.totalTasks > 0 && (
           <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
             <Card className="shadow-card">
               <CardHeader>
@@ -288,27 +286,21 @@ const Dashboard = () => {
               </CardHeader>
               <CardContent>
                 <div className="mobile-scroll">
-                  {ResponsiveContainer && (
-                    <ResponsiveContainer width="100%" height={250} className="min-w-[300px]">
-                      {BarChart && (
-                        <BarChart data={tasksByStatus}>
-                          {CartesianGrid && <CartesianGrid strokeDasharray="3 3" className="stroke-border" />}
-                          {XAxis && <XAxis dataKey="name" className="text-xs" />}
-                          {YAxis && <YAxis />}
-                          {Tooltip && (
-                            <Tooltip 
-                              contentStyle={{ 
-                                backgroundColor: 'hsl(var(--card))',
-                                border: '1px solid hsl(var(--border))',
-                                borderRadius: '8px'
-                              }}
-                            />
-                          )}
-                          {Bar && <Bar dataKey="value" fill="hsl(var(--primary))" radius={[8, 8, 0, 0]} />}
-                        </BarChart>
-                      )}
-                    </ResponsiveContainer>
-                  )}
+                  <ResponsiveContainer width="100%" height={250} className="min-w-[300px]">
+                    <BarChart data={tasksByStatus}>
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                      <XAxis dataKey="name" className="text-xs" />
+                      <YAxis />
+                      <Tooltip 
+                        contentStyle={{ 
+                          backgroundColor: 'hsl(var(--card))',
+                          border: '1px solid hsl(var(--border))',
+                          borderRadius: '8px'
+                        }}
+                      />
+                      <Bar dataKey="value" fill="hsl(var(--primary))" radius={[8, 8, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
                 </div>
               </CardContent>
             </Card>
@@ -320,42 +312,34 @@ const Dashboard = () => {
               </CardHeader>
               <CardContent>
                 <div className="mobile-scroll">
-                  {ResponsiveContainer && (
-                    <ResponsiveContainer width="100%" height={250} className="min-w-[300px]">
-                      {PieChart && (
-                        <PieChart>
-                          {Pie && (
-                            <Pie
-                              data={tasksByPriority}
-                              cx="50%"
-                              cy="50%"
-                              labelLine={false}
-                              label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`}
-                              outerRadius={80}
-                              fill="hsl(var(--primary))"
-                              dataKey="value"
-                            >
-                              {tasksByPriority.map((entry, index) => (
-                                Cell && <Cell 
-                                  key={`cell-${index}`} 
-                                  fill={`hsl(var(--chart-${(index % 5) + 1}))`}
-                                />
-                              ))}
-                            </Pie>
-                          )}
-                          {Tooltip && (
-                            <Tooltip 
-                              contentStyle={{ 
-                                backgroundColor: 'hsl(var(--card))',
-                                border: '1px solid hsl(var(--border))',
-                                borderRadius: '8px'
-                              }}
-                            />
-                          )}
-                        </PieChart>
-                      )}
-                    </ResponsiveContainer>
-                  )}
+                  <ResponsiveContainer width="100%" height={250} className="min-w-[300px]">
+                    <PieChart>
+                      <Pie
+                        data={tasksByPriority}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={false}
+                        label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`}
+                        outerRadius={80}
+                        fill="hsl(var(--primary))"
+                        dataKey="value"
+                      >
+                        {tasksByPriority.map((entry, index) => (
+                          <Cell 
+                            key={`cell-${index}`} 
+                            fill={`hsl(var(--chart-${(index % 5) + 1}))`}
+                          />
+                        ))}
+                      </Pie>
+                      <Tooltip 
+                        contentStyle={{ 
+                          backgroundColor: 'hsl(var(--card))',
+                          border: '1px solid hsl(var(--border))',
+                          borderRadius: '8px'
+                        }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
                 </div>
               </CardContent>
             </Card>

@@ -8,7 +8,9 @@ import { useProjects } from "@/hooks/useProjects";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { useDndKit } from "@/lib/dynamic-dnd-kit";
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
+import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 type WidgetType = "stats" | "tasks" | "documents" | "projects" | "chart";
 
@@ -27,22 +29,18 @@ const defaultWidgets: Widget[] = [
 ];
 
 export function DashboardWidgets() {
-  const { dndKit, loading: dndLoading, DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy, CSS } = useDndKit();
-  
   const [widgets, setWidgets] = useState<Widget[]>(defaultWidgets);
   const [isEditing, setIsEditing] = useState(false);
   const { data: tasks, isLoading: tasksLoading } = useTasks();
   const { data: documents, isLoading: docsLoading } = useDocuments();
   const { data: projects, isLoading: projectsLoading } = useProjects();
 
-  const sensors = useSensors && useSensor && PointerSensor && KeyboardSensor && sortableKeyboardCoordinates
-    ? useSensors(
-        useSensor(PointerSensor),
-        useSensor(KeyboardSensor, {
-          coordinateGetter: sortableKeyboardCoordinates,
-        })
-      )
-    : null;
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   useEffect(() => {
     const saved = localStorage.getItem("dashboardWidgets");
@@ -57,7 +55,6 @@ export function DashboardWidgets() {
   };
 
   const handleDragEnd = (event: any) => {
-    if (!arrayMove) return;
     const { active, over } = event;
     if (over && active.id !== over.id) {
       setWidgets((items) => {
@@ -102,13 +99,12 @@ export function DashboardWidgets() {
         </div>
       </div>
 
-      {!dndLoading && DndContext && closestCenter && SortableContext && verticalListSortingStrategy && (
-        <DndContext
-          sensors={sensors || undefined}
-          collisionDetection={closestCenter}
-          onDragEnd={handleDragEnd}
-        >
-          <SortableContext items={widgets.map((w) => w.id)} strategy={verticalListSortingStrategy}>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleDragEnd}
+      >
+        <SortableContext items={widgets.map((w) => w.id)} strategy={verticalListSortingStrategy}>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {widgets.map((widget) => (
               <SortableWidget
@@ -127,7 +123,6 @@ export function DashboardWidgets() {
           </div>
         </SortableContext>
       </DndContext>
-      )}
 
       {isEditing && (
         <Card>
@@ -176,16 +171,12 @@ function SortableWidget({
   docsLoading: boolean;
   projectsLoading: boolean;
 }) {
-  const { useSortable, CSS } = useDndKit();
-  
-  const sortableResult = useSortable ? useSortable({
+  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({
     id: widget.id,
-  }) : { attributes: {}, listeners: {}, setNodeRef: null, transform: null, transition: '' };
-
-  const { attributes, listeners, setNodeRef, transform, transition } = sortableResult || { attributes: {}, listeners: {}, setNodeRef: null, transform: null, transition: '' };
+  });
 
   const style = {
-    transform: CSS && transform ? CSS.Transform.toString(transform) : undefined,
+    transform: CSS.Transform.toString(transform),
     transition,
   };
 
