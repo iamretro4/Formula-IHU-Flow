@@ -60,7 +60,7 @@ serve(async (req) => {
             "Authorization": `Bearer ${RESEND_API_KEY}`,
           },
           body: JSON.stringify({
-            from: email.from_email || "onboarding@resend.dev",
+            from: email.from_email || "noreply@fihu.gr",
             to: email.to_email,
             subject: email.subject,
             html: email.html_content,

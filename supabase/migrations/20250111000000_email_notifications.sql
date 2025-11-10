@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS public.email_queue (
   to_email TEXT NOT NULL,
   subject TEXT NOT NULL,
   html_content TEXT NOT NULL,
-  from_email TEXT DEFAULT 'noreply@ihuflow.com',
+  from_email TEXT DEFAULT 'noreply@fihu.gr',
   status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'sent', 'failed')),
   retry_count INTEGER DEFAULT 0,
   error_message TEXT,
@@ -38,6 +38,12 @@ ALTER TABLE public.email_queue ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.email_preferences ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies
+-- Drop existing policies if they exist to avoid conflicts
+DROP POLICY IF EXISTS "All authenticated users are admins - full access to email_queue" ON public.email_queue;
+DROP POLICY IF EXISTS "Users can view their own email preferences" ON public.email_preferences;
+DROP POLICY IF EXISTS "Users can update their own email preferences" ON public.email_preferences;
+DROP POLICY IF EXISTS "All authenticated users can insert email preferences" ON public.email_preferences;
+
 CREATE POLICY "All authenticated users are admins - full access to email_queue"
   ON public.email_queue FOR ALL
   TO authenticated
@@ -65,7 +71,7 @@ CREATE OR REPLACE FUNCTION public.send_email_via_edge_function(
   p_to_email TEXT,
   p_subject TEXT,
   p_html_content TEXT,
-  p_from_email TEXT DEFAULT 'noreply@ihuflow.com'
+  p_from_email TEXT DEFAULT 'noreply@fihu.gr'
 )
 RETURNS void
 LANGUAGE plpgsql
@@ -239,5 +245,6 @@ CREATE TRIGGER on_notification_created_send_email
   EXECUTE FUNCTION public.trigger_send_notification_email();
 
 -- Updated_at trigger
+DROP TRIGGER IF EXISTS set_updated_at_email_preferences ON public.email_preferences;
 CREATE TRIGGER set_updated_at_email_preferences BEFORE UPDATE ON public.email_preferences FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
 

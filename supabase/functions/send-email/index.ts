@@ -36,7 +36,7 @@ serve(async (req) => {
       );
     }
 
-    const { to, subject, html, from = 'onboarding@resend.dev' }: EmailRequest = await req.json();
+    const { to, subject, html, from = 'noreply@fihu.gr' }: EmailRequest = await req.json();
 
     if (!to || !subject || !html) {
       return new Response(

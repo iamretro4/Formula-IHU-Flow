@@ -266,7 +266,33 @@ supabase link --project-ref your-project-ref
 supabase functions deploy google-calendar-oauth
 supabase functions deploy google-calendar-sync
 supabase functions deploy process-email-queue
+supabase functions deploy send-email
 ```
+
+### Configure Resend for Email
+
+1. **Get Resend API Key**:
+   - Sign up at [Resend](https://resend.com)
+   - Go to API Keys section
+   - Create a new API key
+
+2. **Set Environment Variable in Supabase**:
+   - Go to Supabase Dashboard → Project Settings → Edge Functions → Secrets
+   - Add a new secret:
+     - Name: `RESEND_API_KEY`
+     - Value: Your Resend API key
+   - Click "Save"
+
+3. **Optional - Configure Custom Domain**:
+   - In Resend dashboard, add and verify your domain
+   - Update the `from_email` in email functions to use your custom domain
+   - Default uses `noreply@fihu.gr` (make sure to verify this domain in Resend)
+
+4. **Deploy Email Functions** (if not already deployed):
+   ```bash
+   supabase functions deploy send-email
+   supabase functions deploy process-email-queue
+   ```
 
 ## 🧪 Development
 
