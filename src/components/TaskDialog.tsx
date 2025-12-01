@@ -105,18 +105,48 @@ export function TaskDialog({ open, onOpenChange, task, projectId, onSuccess }: T
       };
 
       if (task) {
-        const { error } = await supabase
+        const { data: updatedTask, error } = await supabase
           .from("tasks")
           .update(taskData)
-          .eq("id", task.id);
+          .eq("id", task.id)
+          .select()
+          .single();
         if (error) throw error;
         toast({ title: "Task updated successfully" });
+        
+        // Notify Discord
+        if (updatedTask) {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (updatedTask.status === "completed") {
+            await supabase.functions.invoke("discord-notifications", {
+              body: { taskId: updatedTask.id, eventType: "completed", userId: user?.id },
+            });
+          } else if (taskData.assigned_to && taskData.assigned_to !== task.assigned_to) {
+            await supabase.functions.invoke("discord-notifications", {
+              body: { taskId: updatedTask.id, eventType: "assigned", userId: taskData.assigned_to },
+            });
+          } else {
+            await supabase.functions.invoke("discord-notifications", {
+              body: { taskId: updatedTask.id, eventType: "updated", userId: user?.id },
+            });
+          }
+        }
       } else {
-        const { error } = await supabase
+        const { data: newTask, error } = await supabase
           .from("tasks")
-          .insert([taskData]);
+          .insert([taskData])
+          .select()
+          .single();
         if (error) throw error;
         toast({ title: "Task created successfully" });
+        
+        // Notify Discord
+        if (newTask) {
+          const { data: { user } } = await supabase.auth.getUser();
+          await supabase.functions.invoke("discord-notifications", {
+            body: { taskId: newTask.id, eventType: "created", userId: user?.id },
+          });
+        }
       }
 
       onSuccess();

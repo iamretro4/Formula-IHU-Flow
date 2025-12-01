@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { GripVertical, X, Plus } from "lucide-react";
+import { GripVertical, X, Plus, MessageSquare, Hash } from "lucide-react";
 import { useTasks } from "@/hooks/useTasks";
 import { useDocuments } from "@/hooks/useDocuments";
 import { useProjects } from "@/hooks/useProjects";
@@ -12,7 +12,7 @@ import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, us
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
-type WidgetType = "stats" | "tasks" | "documents" | "projects" | "chart";
+type WidgetType = "stats" | "tasks" | "documents" | "projects" | "chart" | "discord";
 
 type Widget = {
   id: string;
@@ -24,8 +24,9 @@ type Widget = {
 const defaultWidgets: Widget[] = [
   { id: "1", type: "stats", title: "Statistics", order: 1 },
   { id: "2", type: "tasks", title: "Recent Tasks", order: 2 },
-  { id: "3", type: "documents", title: "Recent Documents", order: 3 },
-  { id: "4", type: "projects", title: "Active Projects", order: 4 },
+  { id: "3", type: "discord", title: "Discord Channels", order: 3 },
+  { id: "4", type: "documents", title: "Recent Documents", order: 4 },
+  { id: "5", type: "projects", title: "Active Projects", order: 5 },
 ];
 
 export function DashboardWidgets() {
@@ -131,7 +132,7 @@ export function DashboardWidgets() {
           </CardHeader>
           <CardContent>
             <div className="flex gap-2 flex-wrap">
-              {(["stats", "tasks", "documents", "projects", "chart"] as WidgetType[]).map((type) => (
+              {(["stats", "tasks", "documents", "projects", "chart", "discord"] as WidgetType[]).map((type) => (
                 <Button
                   key={type}
                   variant="outline"
@@ -218,6 +219,7 @@ function SortableWidget({
           <ProjectsWidget projects={projects} loading={projectsLoading} />
         )}
         {widget.type === "chart" && <ChartWidget />}
+        {widget.type === "discord" && <DiscordChannelsWidget />}
       </CardContent>
     </Card>
   );
@@ -339,6 +341,61 @@ function ChartWidget() {
   return (
     <div className="h-32 flex items-center justify-center text-muted-foreground">
       <p className="text-sm">Chart widget coming soon</p>
+    </div>
+  );
+}
+
+function DiscordChannelsWidget() {
+  // Discord channels configuration
+  // You can fetch these from Supabase or configure them here
+  const channels = [
+    { name: "general", icon: "💬", description: "General discussion", unread: 3 },
+    { name: "announcements", icon: "📢", description: "Important updates", unread: 1 },
+    { name: "roles", icon: "🎭", description: "Select your team role", unread: 0 },
+    { name: "tasks", icon: "✅", description: "Task discussions", unread: 5 },
+    { name: "team-a", icon: "🔴", description: "Team A channel", unread: 2 },
+    { name: "team-b", icon: "🔵", description: "Team B channel", unread: 0 },
+  ];
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2 mb-3">
+        <MessageSquare className="h-4 w-4 text-muted-foreground" />
+        <p className="text-sm font-medium">Server Channels</p>
+      </div>
+      {channels.map((channel) => (
+        <a
+          key={channel.name}
+          href={`https://discord.com/channels/@me`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center justify-between p-2 border rounded hover:bg-accent transition-colors group"
+        >
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <span className="text-lg">{channel.icon}</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium truncate">#{channel.name}</p>
+              <p className="text-xs text-muted-foreground truncate">{channel.description}</p>
+            </div>
+          </div>
+          {channel.unread > 0 && (
+            <Badge variant="destructive" className="ml-2 flex-shrink-0">
+              {channel.unread}
+            </Badge>
+          )}
+        </a>
+      ))}
+      <div className="pt-2 border-t">
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full"
+          onClick={() => window.open("https://discord.com/channels/@me", "_blank")}
+        >
+          <Hash className="h-4 w-4 mr-2" />
+          Open Discord
+        </Button>
+      </div>
     </div>
   );
 }

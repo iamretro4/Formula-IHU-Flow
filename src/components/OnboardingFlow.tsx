@@ -17,7 +17,7 @@ const steps: Step[] = [
             <li>Track tasks and deadlines</li>
             <li>Manage document approvals</li>
             <li>Collaborate with your team</li>
-            <li>Generate reports and analytics</li>
+            <li>Monitor project progress</li>
           </ul>
         </div>
       </div>

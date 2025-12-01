@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Task, TaskInsert, TaskUpdate } from "@/types";
 import { handleError, handleSuccess } from "@/utils/errorHandler";
 import { retry } from "@/utils/retry";
+import { notifyDiscordTaskChange } from "@/utils/discordNotifications";
 
 export const useTasks = () => {
   return useQuery({
@@ -66,9 +67,14 @@ export const useCreateTask = () => {
       if (error) throw error;
       return data;
     },
-    onSuccess: () => {
+    onSuccess: async (data) => {
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
       handleSuccess("Task created successfully");
+      // Notify Discord
+      if (data?.id) {
+        const { data: { user } } = await supabase.auth.getUser();
+        notifyDiscordTaskChange(data.id, "created", user?.id);
+      }
     },
     onError: (error) => handleError(error, "Create Task"),
   });
@@ -86,9 +92,17 @@ export const useUpdateTask = () => {
       
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: async (data) => {
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
       handleSuccess("Task updated successfully");
+      // Notify Discord if task was completed
+      if (data?.id && data?.status === "completed") {
+        const { data: { user } } = await supabase.auth.getUser();
+        notifyDiscordTaskChange(data.id, "completed", user?.id);
+      } else if (data?.id) {
+        const { data: { user } } = await supabase.auth.getUser();
+        notifyDiscordTaskChange(data.id, "updated", user?.id);
+      }
     },
     onError: (error) => handleError(error, "Update Task"),
   });

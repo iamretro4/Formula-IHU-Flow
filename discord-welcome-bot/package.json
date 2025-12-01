@@ -1,0 +1,27 @@
+{
+  "name": "discord-welcome-bot",
+  "version": "1.0.0",
+  "description": "Automatic welcome messages for Formula IHU Discord server",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node index.js",
+    "setup": "node setup-env.js"
+  },
+  "keywords": [
+    "discord",
+    "bot",
+    "welcome",
+    "formula-ihu"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "discord.js": "^14.14.1",
+    "dotenv": "^16.3.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
+

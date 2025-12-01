@@ -61,7 +61,7 @@ A comprehensive team management and project collaboration platform designed spec
 
 ```bash
 git clone <repository-url>
-cd ihuflow-prep-hub
+cd FIHU Flow
 ```
 
 ### 2. Install Dependencies
@@ -75,11 +75,25 @@ npm install
 Create a `.env.local` file in the root directory:
 
 ```env
+# Supabase Configuration (Required)
 VITE_SUPABASE_URL=your_supabase_project_url
-VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+VITE_SUPABASE_PUBLISHABLE_KEY=your_supabase_anon_key
+
+# Application URLs (Optional - defaults to current origin)
+VITE_BASE_URL=http://localhost:8000
+VITE_HUB_URL=http://localhost:8000
 ```
 
-Get these values from your Supabase project settings:
+**Important Notes:**
+- In Vite, environment variables must be prefixed with `VITE_` to be exposed to the client
+- Access them using `import.meta.env.VITE_*` (not `process.env`)
+- For production, update URLs to your actual domain:
+  ```env
+  VITE_BASE_URL=https://fihu.gr
+  VITE_HUB_URL=https://hub.fihu.gr
+  ```
+
+Get Supabase values from your Supabase project settings:
 1. Go to [Supabase Dashboard](https://supabase.com/dashboard)
 2. Select your project
 3. Go to Settings → API
@@ -122,7 +136,7 @@ The application will be available at `http://localhost:8000`
 ## 🏗️ Project Structure
 
 ```
-ihuflow-prep-hub/
+FIHU Flow/
 ├── src/
 │   ├── components/          # React components
 │   │   ├── ui/              # shadcn/ui components
@@ -246,7 +260,9 @@ This creates an optimized production build in the `dist/` directory.
 1. Connect your repository
 2. Set environment variables:
    - `VITE_SUPABASE_URL`
-   - `VITE_SUPABASE_ANON_KEY`
+   - `VITE_SUPABASE_PUBLISHABLE_KEY`
+   - `VITE_BASE_URL` (optional)
+   - `VITE_HUB_URL` (optional)
 3. Build command: `npm run build`
 4. Output directory: `dist`
 

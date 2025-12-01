@@ -11,7 +11,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { LayoutDashboard, CheckSquare, FileText, Users, LogOut, Menu, Target, Workflow, DollarSign, MessageSquare, AlertTriangle, GanttChart, Calendar, History } from "lucide-react";
+import { LayoutDashboard, CheckSquare, FileText, Users, LogOut, Menu, Target, DollarSign, GanttChart, Calendar } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import formulaIhuLogo from "@/assets/formula-ihu-logo.png";
@@ -78,15 +78,11 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
     { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
     { icon: CheckSquare, label: "Tasks", path: "/tasks" },
     { icon: FileText, label: "Documents", path: "/documents" },
-    { icon: Workflow, label: "Approval Workflows", path: "/approval-workflows" },
     { icon: Target, label: "Projects", path: "/projects" },
     { icon: GanttChart, label: "Gantt Chart", path: "/gantt-chart" },
     { icon: Calendar, label: "Calendar", path: "/calendar" },
-    { icon: History, label: "Activity Log", path: "/activity-log" },
     { icon: DollarSign, label: "Budgets", path: "/budgets" },
-    { icon: MessageSquare, label: "Communications", path: "/communications" },
     { icon: Users, label: "Team", path: "/team" },
-    { icon: FileText, label: "Reports", path: "/reports" },
   ], []);
 
   const NavContent = () => (
@@ -195,10 +191,10 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
                   <Menu className="h-5 w-5" />
                 </Button>
               </SheetTrigger>
-            <SheetContent side="left" className="w-64 sm:w-80 p-0 flex flex-col">
-              <NavContent />
-            </SheetContent>
-          </Sheet>
+              <SheetContent side="left" className="w-64 sm:w-80 p-0 flex flex-col">
+                <NavContent />
+              </SheetContent>
+            </Sheet>
           </div>
         </header>
       </div>

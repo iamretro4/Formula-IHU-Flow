@@ -4,6 +4,7 @@ import { UserPreferences } from "@/components/UserPreferences";
 import { ThirdPartyIntegrations } from "@/components/ThirdPartyIntegrations";
 import { AdvancedPermissions } from "@/components/AdvancedPermissions";
 import { VisualWorkflowBuilder } from "@/components/VisualWorkflowBuilder";
+import { DiscordIntegration } from "@/components/DiscordIntegration";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -150,7 +151,8 @@ const Settings = () => {
           <TabsContent value="email">
             <EmailSettingsComponent />
           </TabsContent>
-          <TabsContent value="integrations">
+          <TabsContent value="integrations" className="space-y-4">
+            <DiscordIntegration />
             <ThirdPartyIntegrations />
           </TabsContent>
           <TabsContent value="permissions">

@@ -18,14 +18,10 @@ const Tasks = lazy(() => import("./pages/Tasks"));
 const Documents = lazy(() => import("./pages/Documents"));
 const Team = lazy(() => import("./pages/Team"));
 const Projects = lazy(() => import("./pages/Projects"));
-const ApprovalWorkflows = lazy(() => import("./pages/ApprovalWorkflows"));
 const Budgets = lazy(() => import("./pages/Budgets"));
-const Communications = lazy(() => import("./pages/Communications"));
 const GanttChart = lazy(() => import("./pages/GanttChart"));
 const CalendarView = lazy(() => import("./pages/CalendarView"));
-const ActivityLog = lazy(() => import("./pages/ActivityLog"));
 const Settings = lazy(() => import("./pages/Settings"));
-const Reports = lazy(() => import("./pages/Reports"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const OnboardingFlow = lazy(() => import("./components/OnboardingFlow").then(m => ({ default: m.OnboardingFlow })));
 
@@ -102,16 +98,12 @@ const App = () => (
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/tasks" element={<Tasks />} />
               <Route path="/documents" element={<Documents />} />
-              <Route path="/approval-workflows" element={<ApprovalWorkflows />} />
               <Route path="/projects" element={<Projects />} />
               <Route path="/gantt-chart" element={<GanttChart />} />
               <Route path="/calendar" element={<CalendarView />} />
-              <Route path="/activity-log" element={<ActivityLog />} />
               <Route path="/budgets" element={<Budgets />} />
-              <Route path="/communications" element={<Communications />} />
               <Route path="/team" element={<Team />} />
               <Route path="/settings" element={<Settings />} />
-              <Route path="/reports" element={<Reports />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>
