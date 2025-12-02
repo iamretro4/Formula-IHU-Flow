@@ -22,7 +22,20 @@ This will install:
 - `discord.js` - Discord API library
 - `dotenv` - Environment variable management
 
-### Step 3: Get Your Supabase Anon Key
+### Step 3: Enable Discord Bot Intents
+
+**IMPORTANT:** Before running the bot, you must enable the required intent in Discord Developer Portal:
+
+1. Go to: https://discord.com/developers/applications
+2. Select your bot application
+3. Click **Bot** in the left sidebar
+4. Scroll down to **Privileged Gateway Intents**
+5. Enable **SERVER MEMBERS INTENT** ✅
+6. Click **Save Changes**
+
+**Why?** The bot needs this intent to detect when new members join your server.
+
+### Step 4: Get Your Supabase Anon Key
 
 1. Go to: https://supabase.com/dashboard/project/hirifbecooazbevauffq
 2. Click **Settings** (gear icon) → **API**
@@ -30,7 +43,7 @@ This will install:
 4. Copy the **`anon` public** key (starts with `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...`)
 5. **Important:** Use the `anon` key, NOT the `service_role` key!
 
-### Step 4: Configure the Bot
+### Step 5: Configure the Bot
 
 1. Copy the example environment file:
    ```bash
@@ -48,7 +61,7 @@ This will install:
    - Right-click on your welcome channel → Copy ID
    - Add to `.env`: `WELCOME_CHANNEL_ID=your_channel_id`
 
-### Step 5: Run the Bot
+### Step 6: Run the Bot
 
 ```bash
 npm start
@@ -62,7 +75,7 @@ You should see:
    Watching for new members...
 ```
 
-### Step 6: Test It
+### Step 7: Test It
 
 1. Have someone join your Discord server (or use an alt account)
 2. The bot should automatically send a welcome message
@@ -140,10 +153,12 @@ npm start
 - Check the token is correct
 - No quotes around the value in `.env`
 
-### "Failed to login"
+### "Failed to login" or "Used disallowed intents"
+- **Enable SERVER MEMBERS INTENT in Discord Developer Portal** (see Step 3 above)
 - Bot token might be invalid
 - Bot might not be in your server
 - Check bot has proper permissions
+- Wait a few minutes after enabling intents for changes to propagate
 
 ### "Welcome message not sending"
 - Check Supabase anon key is correct

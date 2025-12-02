@@ -22,11 +22,7 @@ type Widget = {
 };
 
 const defaultWidgets: Widget[] = [
-  { id: "1", type: "stats", title: "Statistics", order: 1 },
-  { id: "2", type: "tasks", title: "Recent Tasks", order: 2 },
-  { id: "3", type: "discord", title: "Discord Channels", order: 3 },
-  { id: "4", type: "documents", title: "Recent Documents", order: 4 },
-  { id: "5", type: "projects", title: "Active Projects", order: 5 },
+  { id: "1", type: "discord", title: "Discord Channels", order: 1 },
 ];
 
 export function DashboardWidgets() {
