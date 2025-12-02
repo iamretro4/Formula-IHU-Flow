@@ -10,6 +10,20 @@ const DISCORD_BOT_TOKEN = Deno.env.get("DISCORD_BOT_TOKEN") || "";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 
+// Validate critical environment variables
+function validateEnvVars(): string | null {
+  if (!DISCORD_PUBLIC_KEY) {
+    return "DISCORD_PUBLIC_KEY is not set";
+  }
+  if (!SUPABASE_URL) {
+    return "SUPABASE_URL is not set";
+  }
+  if (!SUPABASE_SERVICE_ROLE_KEY) {
+    return "SUPABASE_SERVICE_ROLE_KEY is not set";
+  }
+  return null;
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -895,9 +909,31 @@ serve(async (req) => {
   // Only accept POST requests
   if (req.method !== "POST") {
     return new Response(
-      JSON.stringify({ error: "Method not allowed" }),
+      JSON.stringify({
+        type: 4,
+        data: { content: "❌ Method not allowed", flags: 64 },
+      }),
       {
-        status: 405,
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      }
+    );
+  }
+
+  // Validate environment variables early
+  const envError = validateEnvVars();
+  if (envError) {
+    console.error("Environment variable error:", envError);
+    return new Response(
+      JSON.stringify({
+        type: 4,
+        data: { 
+          content: `❌ Server configuration error: ${envError}. Please check Supabase Edge Function secrets.`,
+          flags: 64 
+        },
+      }),
+      {
+        status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       }
     );
@@ -911,17 +947,46 @@ serve(async (req) => {
     const isValid = await verifyDiscordSignature(req, bodyText);
     if (!isValid) {
       console.error("Invalid Discord signature");
+      // Discord still needs a valid interaction response even for unauthorized requests
+      // Return a PONG for PING, or an error message for other types
+      try {
+        const interaction: DiscordInteraction = JSON.parse(bodyText);
+        if (interaction.type === 1) {
+          return handlePing();
+        }
+      } catch {
+        // If we can't parse, just return PONG as fallback
+        return handlePing();
+      }
       return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
+        JSON.stringify({
+          type: 4,
+          data: { content: "❌ Unauthorized: Invalid signature", flags: 64 },
+        }),
         {
-          status: 401,
+          status: 200,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         }
       );
     }
 
     // Parse the interaction JSON
-    const interaction: DiscordInteraction = JSON.parse(bodyText);
+    let interaction: DiscordInteraction;
+    try {
+      interaction = JSON.parse(bodyText);
+    } catch (parseError) {
+      console.error("Error parsing interaction JSON:", parseError);
+      return new Response(
+        JSON.stringify({
+          type: 4,
+          data: { content: "❌ Error: Invalid request format", flags: 64 },
+        }),
+        {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
 
     // Handle PING (type 1)
     if (interaction.type === 1) {
@@ -986,10 +1051,18 @@ serve(async (req) => {
     );
   } catch (error: any) {
     console.error("Error processing Discord interaction:", error);
+    // Always return a valid Discord interaction response (status 200)
+    // Discord requires status 200 with a valid interaction response type
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({
+        type: 4, // CHANNEL_MESSAGE_WITH_SOURCE
+        data: {
+          content: `❌ An error occurred: ${error.message || "Unknown error"}`,
+          flags: 64, // EPHEMERAL - only visible to user
+        },
+      }),
       {
-        status: 500,
+        status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       }
     );
